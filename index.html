@@ -2112,6 +2112,9 @@ function daysToBlocks(d,setsFor,firstNote){
   d.items.forEach((x,i)=>{
     const e=findEx(x.g,x.n);if(!e)return;
     const it={e,kind:e.c?'c':'i',main:false,sets:setsFor(x.sets),reps:x.reps,rest:x.rest,notes:x.note?[{k:'',t:'Your note',d:x.note}]:[],prio:false};
+    const pp=String(x.reps||'').split('/').map(v=>v.trim()).filter(Boolean);
+    if(pp.length>1){it.pyr=pp.join(' / ');it.sets=pp.length;it.notes.push({k:'t',t:'Pyramid',d:'Add weight each set as the reps drop.'});}
+    if(x.tech==='drop')it.notes.push({k:'t',t:'Drop set',d:'On the last set, drop the weight about 25% and keep going. Do it twice.'});
     if(open){open.items.push(it);it.sets=open.items[0].sets;if(!x.ss||open.items.length>=3)open=null;return;}
     if(x.ss&&i<d.items.length-1){open={type:'pair',items:[it]};blocks.push(open);return;}
     blocks.push({type:'single',items:[it]});
@@ -2147,6 +2150,59 @@ function bodyPair(eff,max,pick){
   return `<div class="bpair${pick?' pick':''}"><figure><svg viewBox="0 0 200 392" role="img" aria-label="Front">${paint(figF())}</svg><figcaption>Front</figcaption></figure><figure><svg viewBox="0 0 200 392" role="img" aria-label="Back">${paint(figB())}</svg><figcaption>Back</figcaption></figure></div>`;
 }
 const TPL=[['arms','Arms',[['biceps','i'],['triceps','i'],['biceps','i'],['triceps','i'],['forearms','i']]],['push','Push',[['chest','c'],['shoulders','c'],['chest','i'],['shoulders','i'],['triceps','i'],['triceps','i']]],['pull','Pull',[['lats','c'],['upperback','c'],['lats','i'],['upperback','i'],['biceps','i'],['biceps','i']]],['legs','Legs',[['quads','c'],['glutes','c'],['hamstrings','i'],['quads','i'],['calves','i'],['adductors','i']]],['upper','Upper',[['chest','c'],['upperback','c'],['shoulders','c'],['lats','c'],['biceps','i'],['triceps','i']]],['lower','Lower',[['quads','c'],['glutes','c'],['hamstrings','i'],['calves','i'],['abs','i'],['obliques','i']]],['full','Full body',[['quads','c'],['chest','c'],['upperback','c'],['hamstrings','i'],['shoulders','i'],['abs','i']]],['shoarm','Shoulders & arms',[['shoulders','c'],['shoulders','i'],['biceps','i'],['triceps','i'],['biceps','i'],['triceps','i']]],['core','Core',[['abs','i'],['obliques','i'],['abs','i'],['lowerback','i']]]];
+// template options: how the exercises are grouped, and how long the session should take
+const TTYPE=[['straight','Straight sets','Rest after every set'],['superset','Supersets','Two moves back to back, rest after the pair'],['giant','Giant sets','Three moves in a row, then rest'],['drop','Drop sets','Last set of each isolation move: drop ~25% and keep going'],['pyramid','Pyramid','Main lifts go 12 / 10 / 8 / 6, adding weight each set']];
+const TTIME=[[30,'30 min'],[45,'45 min'],[60,'60 min'],[90,'90 min'],[120,'2 hr']];
+function tplDefaults(){
+  if(!A.tplType)A.tplType='straight';
+  if(!A.tplMins){const per=A.days&&A.hours?A.hours/A.days*60:45;A.tplMins=TTIME.reduce((b,[m])=>Math.abs(m-per)<Math.abs(b-per)?m:b,45);}
+}
+function styleTpl(items,type,mins){
+  const short=mins<=30,long=mins>=90;
+  items.forEach((x,i)=>{
+    const e=findEx(x.g,x.n),c=e&&e.c;
+    x.sets=c&&long?4:3;x.reps=c?'6–10':'10–15';x.rest=c?(short?90:120):(short?45:60);delete x.ss;delete x.tech;
+    if(type==='superset'){x.ss=i%2===0;x.rest=c?90:60;}
+    if(type==='giant'){x.ss=i%3!==2;x.rest=c?90:60;if(!c)x.reps='12–15';}
+    if(type==='drop'&&!c){x.tech='drop';x.reps='10–12';}
+    if(type==='pyramid'&&c){x.reps=short?'10/8/6':'12/10/8/6';x.sets=x.reps.split('/').length;x.rest=short?90:120;}
+  });
+  if(items.length&&items[items.length-1].ss)delete items[items.length-1].ss;
+  return items;
+}
+// fill a day from a template until the session would run past the chosen length
+function tplItems(T,type,mins,taken){
+  const used=new Set(taken),G=T[2];let items=[];
+  const cap=(mins>=120?10:mins>=90?9:8)+(type==='giant'?1:0);                       // past this, longer sessions get more sets, not more exercises
+  for(let k=0;k<G.length*2&&items.length<cap;k++){
+    const [g,kind]=G[k%G.length];const e=autoPick(g,k>=G.length?'i':kind,used);if(!e)continue;
+    const cand=styleTpl(items.map(x=>Object.assign({},x)).concat([newItem(e)]),type,mins);
+    if(items.length>=2&&dayMins(daysToBlocks({items:cand},x=>x))>mins+3)break;
+    used.add(e.name);items=cand;
+  }
+  const fit=()=>dayMins(daysToBlocks({items},x=>x));
+  for(let guard=0;guard<40&&fit()<mins-4;guard++){
+    const x=items.filter(x=>!String(x.reps).includes('/')&&x.sets<5).sort((a,b)=>a.sets-b.sets)[0];if(!x)break;
+    x.sets++;const i=items.indexOf(x);
+    if(i>0&&items[i-1].ss)items[i-1].sets=x.sets;if(x.ss&&items[i+1])items[i+1].sets=x.sets;   // keep supersets in step
+    if(fit()>mins+3){x.sets--;break;}
+  }
+  return items;
+}
+// phase patterns for programs: [name, weeks, main-lift reps, isolation reps, main-lift sets]
+const PHP={
+  pyramid:['Pyramid','Light and high-rep, down to heavy and low-rep, then back up',[['Light',2,'15–20','15–20',3],['Moderate',2,'10–12','12–15',3],['Heavy',2,'6–8','10–12',4],['Peak',1,'3–5','8–10',4],['Heavy',2,'6–8','10–12',4],['Moderate',2,'10–12','12–15',3],['Light',1,'15–20','15–20',3]]],
+  linear:['Linear','Build muscle, then strength, then peak',[['Hypertrophy',4,'8–12','12–15',3],['Strength',4,'4–6','8–10',4],['Peak',2,'2–4','8–10',4]]],
+  reverse:['Reverse linear','Heavy first, then lighter and higher reps. Good while cutting',[['Strength',4,'4–6','8–10',4],['Hypertrophy',4,'8–12','12–15',3],['Endurance',3,'15–20','15–20',3]]],
+  wave:['Weekly wave','Heavy, medium and light weeks in rotation',[['Heavy',1,'4–6','8–10',4],['Medium',1,'8–10','10–12',3],['Light',1,'12–15','15–20',3],['Heavy',1,'4–6','8–10',4],['Medium',1,'8–10','10–12',3],['Light',1,'12–15','15–20',3],['Heavy',1,'4–6','8–10',4],['Medium',1,'8–10','10–12',3],['Light',1,'12–15','15–20',3]]],
+  block:['Block','High volume, then heavier, then a short peak',[['Accumulation',4,'10–12','12–15',4],['Intensification',3,'6–8','10–12',4],['Realization',2,'3–5','8–10',3]]]
+};
+const restFor=(c,reps)=>{const lo=parseInt(reps,10)||10;return c?(lo<=5?180:lo<=8?150:lo<=12?90:60):(lo<=8?90:lo<=12?60:45);};
+function applyPattern(b,key,fromPh){
+  const P=PHP[key],base=b.phases[fromPh]||b.phases[0];
+  b.phases=P[2].map(([name,weeks,cr,ir,cs])=>({id:uid('p'),name,weeks,days:base.days.map(d=>({id:uid('d'),name:d.name,items:d.items.map(x=>{const e=findEx(x.g,x.n),c=!!(e&&e.c);const y=Object.assign({},x,{reps:c?cr:ir,sets:c?cs:3,rest:restFor(c,c?cr:ir)});delete y.tech;return y;})}))}));
+  b.pattern=key;
+}
 const fits=(e,C)=>C.equip.has(e.eq)&&e.lvl<=C.maxLvl&&!e.inj.some(i=>C.inj.has(i))&&!C.avoid.has(e.name);
 const newItem=e=>({n:e.name,g:e.g,sets:3,reps:e.c?'6–10':'10–15',rest:e.c?120:60});
 function autoPick(g,kind,used){
@@ -2221,6 +2277,11 @@ function renderBuildTab(){
         <div class="field"><label>Weeks</label><span class="stp"><button class="ib" data-bphw="-1" aria-label="Fewer weeks">−</button><b>${ph.weeks}</b><button class="ib" data-bphw="1" aria-label="More weeks">+</button></span></div>
       </div>
       ${b.phases.length>1?`<div class="row" style="flex-wrap:wrap;gap:6px">${S.bPhDel?`<button class="chip sm" data-bphdelyes="1" style="color:var(--red)">Delete ${esc(ph.name)}</button><button class="chip sm" data-bphdelno="1">Keep</button>`:`<button class="chip sm" data-bphdup="1" style="flex:none">Duplicate phase</button><button class="chip sm" data-bphdel="1" style="flex:none">Delete phase</button>`}</div>`:`<div class="row"><button class="chip sm" data-bphdup="1" style="flex:none">Duplicate phase as the next block</button></div>`}
+      <div class="field"><label>Phase pattern</label><div class="chips">${Object.entries(PHP).map(([k,[n,dsc]])=>`<button class="chip sm ${(S.bPat||b.pattern)===k?'on':''}" data-bpat="${k}" aria-pressed="${(S.bPat||b.pattern)===k}" title="${dsc}">${n}</button>`).join('')}</div>
+        ${S.bPat?(()=>{const P=PHP[S.bPat],wk=P[2].reduce((t,x)=>t+x[1],0),has=ph.days.some(x=>x.items.length);return `<div class="panel" style="background:var(--surface-2);border:0;display:grid;gap:8px;padding:12px"><b>${P[0]}: ${P[1]}.</b>
+          <div class="tl">${P[2].map((x,i)=>Array.from({length:x[1]},()=>`<span class="tw ph${i%4}" title="${x[0]}: main lifts ${x[2]} reps">${x[2].split('–')[0]}</span>`).join('')).join('')}</div>
+          <span class="hint" style="text-align:left;font-size:13px">${P[2].map(x=>`${x[0]} ${x[1]} wk (${x[2]} reps)`).join(' → ')}. ${wk} weeks. Numbers in the timeline are main-lift reps; isolation moves stay a bit higher. Your weight targets follow the reps automatically.</span>
+          ${has?`<span class="hint" style="text-align:left;font-size:13px">Uses the exercises in <b>${esc(ph.name)}</b>${b.phases.length>1?` and replaces your ${b.phases.length} phases`:''}.</span><div class="row"><button class="btn" data-bpatgo="1" style="padding:11px">Apply pattern</button><button class="btn ghost" data-bpatx="1" style="padding:11px 18px;flex:none;width:auto">Cancel</button></div>`:`<span class="hint" style="text-align:left;font-size:13px;color:var(--red)">Add exercises to ${esc(ph.name)} first, then apply.</span>`}</div>`;})():''}</div>
       <div class="field"><label>Progression</label><div class="chips">${Object.entries(PROG_N).map(([k,[n,d]])=>`<button class="chip sm ${b.prog===k?'on':''}" data-bprog="${k}" title="${d}">${n}</button>`).join('')}</div><span class="hint" style="text-align:left">${PROG_N[b.prog||'load'][1]}.</span></div>
       <div class="field"><label>Lighter (deload) week</label><div class="chips">${[[0,'None'],[4,'Every 4th'],[5,'Every 5th'],[6,'Every 6th']].map(([v,n])=>`<button class="chip sm ${+b.deload===v?'on':''}" data-bdl="${v}">${n}</button>`).join('')}</div></div>
       ${active?`<div class="field"><label>Current week</label><span class="stp"><button class="ib" data-bcw="-1" aria-label="Previous week">−</button><b>${cw}</b><small>of ${tw}</small><button class="ib" data-bcw="1" aria-label="Next week">+</button></span></div>`:''}
@@ -2250,12 +2311,16 @@ function renderBuildTab(){
         <div class="bit-move"><button class="ib" data-bup="${i}" aria-label="Move up" ${i===0?'disabled':''}>↑</button><button class="ib" data-bdown="${i}" aria-label="Move down" ${i===d.items.length-1?'disabled':''}>↓</button><button class="ib" data-bdel="${i}" aria-label="Remove ${esc(e.name)}">✕</button></div></div>
       <div class="bit-ctl">
         <span class="stp"><button class="ib" data-bset="${i}|-1" aria-label="Fewer sets">−</button><b>${x.sets}</b><small>sets</small><button class="ib" data-bset="${i}|1" aria-label="More sets">+</button></span>
-        <label class="bf"><input id="breps-${i}" data-breps="${i}" value="${esc(x.reps)}" maxlength="9" aria-label="Reps for ${esc(e.name)}"><small>reps</small></label>
+        <label class="bf"><input id="breps-${i}" data-breps="${i}" value="${esc(x.reps)}" maxlength="16" title="Use slashes for a pyramid, e.g. 12/10/8/6" aria-label="Reps for ${esc(e.name)}"><small>reps</small></label>
         <label class="bf"><select id="brest-${i}" data-brest="${i}" aria-label="Rest for ${esc(e.name)}">${RESTS.map(r=>`<option value="${r}" ${+x.rest===r?'selected':''}>${fmtRest(r)}</option>`).join('')}</select><small>rest</small></label>
         ${i<d.items.length-1?`<button class="chip sm ${x.ss?'on':''}" data-bss="${i}" aria-pressed="${!!x.ss}">${x.ss?'Superset ✓':'Superset with next'}</button>`:''}
+        <button class="chip sm ${x.tech==='drop'?'on':''}" data-bdrop="${i}" aria-pressed="${x.tech==='drop'}">${x.tech==='drop'?'Drop set ✓':'Drop set'}</button>
       </div></div>`;}).join('')}</div>`:`<div class="empty" style="text-align:left">No exercises yet. Add them one at a time or start from a template.</div>`}
     <div class="bpick-wrap">${S.bPick?renderPicker(C):`<button class="btn" data-bpick="1">+ Add exercise</button>`}</div>
-    ${d&&d.items.length?'':`<div class="tplrow"><div class="eyebrow">Start from a template</div><div class="chips">${TPL.map(([k,n])=>`<button class="chip" data-btpl="${k}">${n}</button>`).join('')}</div></div>`}
+    ${d&&d.items.length?'':(tplDefaults(),`<div class="tplrow"><div class="eyebrow">Start from a template</div>
+      <div class="field"><label>Workout type</label><div class="chips">${TTYPE.map(([k,n])=>`<button class="chip sm ${A.tplType===k?'on':''}" data-btype="${k}" aria-pressed="${A.tplType===k}">${n}</button>`).join('')}</div><span class="hint" style="text-align:left;font-size:13px">${TTYPE.find(x=>x[0]===A.tplType)[2]}.</span></div>
+      <div class="field"><label>Workout length</label><div class="chips">${TTIME.map(([m,n])=>`<button class="chip sm ${A.tplMins===m?'on':''}" data-btime="${m}" aria-pressed="${A.tplMins===m}">${n}</button>`).join('')}</div></div>
+      <div class="field"><label>Muscles</label><div class="chips">${TPL.map(([k,n])=>`<button class="chip" data-btpl="${k}">${n}</button>`).join('')}</div></div></div>`)}
     ${isDay?'':`<div class="bday-act"><button class="chip sm" data-bdup="1">Duplicate day</button></div>`}
   </div>`;
   const ready=b.phases.some(p=>p.days.some(x=>x.items.length));
@@ -2326,7 +2391,13 @@ document.addEventListener('click',ev=>{
   if(t.dataset.bdelbyes){const L=builds();const k=L.findIndex(x=>x.id===S.bId);if(k>=0){const gone=L.splice(k,1)[0];if(A.activeBuild===gone.id){delete A.activeBuild;A.mode='auto';}toast(gone.name+' deleted');}S.bId=null;S.bDelB=false;save();rebuild();renderBuildTab();window.scrollTo(0,0);return;}
   if(t.dataset.baddDay){bMut(d=>{d.push({id:uid('d'),name:'Day '+(d.length+1),items:[]});S.bDay=d.length-1;S.bPick=true;S.bConfirmDel=false;});return;}
   if(t.dataset.bday!=null){S.bDay=+t.dataset.bday;S.bConfirmDel=false;S.bPick=false;bRender();return;}
-  if(t.dataset.btpl){const T=TPL.find(x=>x[0]===t.dataset.btpl);bMut(d=>{if(!d.length)d.push({id:uid('d'),name:T[1],items:[]});const day=d[S.bDay]||d[0];if(/^Day \d+$/.test(day.name)||!day.name||day.name==='Workout')day.name=T[1];const b=curBuild();if(b.kind==='day'&&/^Workout \d+$/.test(b.name))b.name=T[1];const used=new Set(day.items.map(x=>x.n));T[2].forEach(([g,k])=>{const e=autoPick(g,k,used);if(e){used.add(e.name);day.items.push(newItem(e));}});});toast(T[1]+' template added. Adjust anything you like.');return;}
+  if(t.dataset.btype){A.tplType=t.dataset.btype;save();bRender();return;}
+  if(t.dataset.btime){A.tplMins=+t.dataset.btime;save();bRender();return;}
+  if(t.dataset.bdrop!=null){bMut(d=>{const x=d[S.bDay].items[+t.dataset.bdrop];if(x.tech==='drop')delete x.tech;else x.tech='drop';});return;}
+  if(t.dataset.bpat){S.bPat=S.bPat===t.dataset.bpat?null:t.dataset.bpat;bRender();return;}
+  if(t.dataset.bpatx){S.bPat=null;bRender();return;}
+  if(t.dataset.bpatgo){const k=S.bPat;bMutB(b=>{applyPattern(b,k,S.bPh);if(b.deload&&PHP[k][2].some(x=>x[1]===1&&k==='wave'))b.deload=0;S.bPh=0;S.bDay=0;S.bPat=null;});toast(PHP[k][0]+' pattern applied: '+curBuild().phases.length+' phases, '+totalWeeks(curBuild())+' weeks');return;}
+  if(t.dataset.btpl){tplDefaults();const T=TPL.find(x=>x[0]===t.dataset.btpl);let mins=0;bMut(d=>{if(!d.length)d.push({id:uid('d'),name:T[1],items:[]});const day=d[S.bDay]||d[0];if(/^Day \d+$/.test(day.name)||!day.name||day.name==='Workout')day.name=T[1];const b=curBuild();if(b.kind==='day'&&/^Workout \d+$/.test(b.name))b.name=T[1];day.items=day.items.concat(tplItems(T,A.tplType,A.tplMins,day.items.map(x=>x.n)));mins=dayMins(daysToBlocks(day,x=>x));});toast(`${T[1]} · ${TTYPE.find(x=>x[0]===A.tplType)[1].toLowerCase()} · about ${mins} min. Adjust anything you like.`);return;}
   if(t.dataset.bpick!=null){S.bPick=t.dataset.bpick==='1';if(S.bPick&&!S.bPickG)S.bPickG='biceps';bRender();return;}
   if(t.dataset.bpg){S.bPickG=t.dataset.bpg;bRender();return;}
   if(t.dataset.bshowall){S.bShowAll=!S.bShowAll;bRender();return;}
