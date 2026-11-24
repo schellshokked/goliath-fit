@@ -58,3 +58,18 @@ so installed copies pick up the new version the next time they open online.
 
 Go to https://www.pwabuilder.com, enter your app's address, and choose **Android** to get a
 package you can upload to Google Play (a Google Play developer account costs a one-time $25).
+
+## Accounts (Supabase)
+
+Sign-in is email and password, with one private data row per person. Until `config.js`
+has keys, the app runs without accounts and keeps data on each device.
+
+1. Create a free project at https://supabase.com.
+2. **SQL Editor → New query**: paste `supabase/schema.sql` and run it.
+3. **Authentication → Sign In / Providers → Email**: keep Email enabled. For a small test
+   group, turn **Confirm email** off so people can sign in straight after signing up.
+4. **Authentication → URL Configuration**: set **Site URL** to `https://goliath-fit.vercel.app`
+   (password-reset links return there).
+5. **Project Settings → API**: copy the **Project URL** and the **anon public** key into
+   `config.js`. The anon key is meant to be public; row-level security protects the data.
+   Never put the `service_role` key in this repository.
