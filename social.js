@@ -1,4 +1,4 @@
-// Goliath Social: add friends by email, accept requests, and follow each other's finished workouts.
+// Goliath Social: add friends by email, follow each other's workouts, see who's online, and message each other.
 // Needs accounts (auth.js). Privacy is enforced by the database: nothing is visible until both people accept.
 (function(){
   const AUTH = window.__goliathAuth;
@@ -6,6 +6,8 @@
   let me = null, profile = null, friends = [], feed = [], profiles = {}, loading = false, loaded = false, err = '';
   let open = null, confirmRemove = null, sending = false, formMsg = null;
   let shares = [], send = null;   // send = {prog, friend, note, busy} while the send-a-program panel is open
+  let msgs = [], chat = null, rt = null, rtOk = false, lastSetAt = 0, lastBeat = 0, cheered = new Set();
+  const ONLINE_MS = 150000;        // a heartbeat newer than 2.5 min counts as online
   const sb = () => AUTH.sb;
   const myEmail = () => (me && me.email || '').toLowerCase();
   const myName = () => ((me && me.user_metadata && me.user_metadata.name) || '').trim();
@@ -65,7 +67,40 @@
   .shr{display:grid;gap:10px}
   .shr + .shr{border-top:1px solid var(--line);padding-top:12px}
   .shr q{font-size:14px;color:var(--muted);font-style:italic}
-  .soc .empty{text-align:left;padding:4px 0;color:var(--muted);font-size:14px}`;
+  .soc .empty{text-align:left;padding:4px 0;color:var(--muted);font-size:14px}
+  .avw{position:relative;flex:none;display:grid}
+  .pp > .avw{flex:none;min-width:auto}
+  .avw .av{width:40px;height:40px;border-radius:50%;background:var(--ink);color:var(--bg);display:grid;place-items:center;font:700 16px var(--f-body)}
+  .avw .av.me{background:var(--accent);color:var(--on-accent)}
+  .avw .on-dot{position:absolute;right:-1px;bottom:-1px;width:13px;height:13px;border-radius:50%;background:var(--green);border:2.5px solid var(--surface)}
+  .pp small.live{color:var(--green);font-weight:600}
+  .pp small.new{color:var(--ink);font-weight:600}
+  .frrow{display:flex;align-items:center;gap:8px;min-width:0}
+  .frrow > .pp{flex:1}
+  .msgbtn{flex:none;position:relative;width:42px;height:42px;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;padding:0}
+  .msgbtn svg{width:20px;height:20px}
+  .msgbtn .tab-dot{top:-4px;right:-4px}
+  .online-strip{display:flex;gap:14px;overflow-x:auto;padding:2px 2px 4px;scrollbar-width:none}
+  .online-strip button{flex:none;display:grid;justify-items:center;gap:5px;background:none;border:0;padding:0;color:var(--ink);width:58px}
+  .online-strip .av{width:48px;height:48px;font-size:18px}
+  .online-strip small{font-size:11.5px;max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cheer{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 11px;font:600 13px var(--f-body);color:var(--ink)}
+  .cheer[disabled]{opacity:.6}
+  .chat{gap:0;padding-bottom:0;min-height:calc(100dvh - 170px)}
+  .chat-head{display:flex;align-items:center;gap:10px;padding:4px 0 12px;border-bottom:1px solid var(--line);position:sticky;top:var(--hdr,64px);background:var(--bg);z-index:3}
+  .chat-head .chip{flex:none}
+  .chat-list{display:flex;flex-direction:column;gap:4px;padding:14px 0;flex:1}
+  .chat-day{align-self:center;font:600 11.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:10px 0 6px}
+  .bub{max-width:80%;padding:9px 13px;border-radius:18px;font-size:15.5px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--line);color:var(--ink);align-self:flex-start;border-bottom-left-radius:6px}
+  .bub.mine{align-self:flex-end;background:var(--accent);border-color:var(--accent);color:var(--on-accent);border-bottom-left-radius:18px;border-bottom-right-radius:6px}
+  .bub.pending{opacity:.6}
+  .bub-t{font-size:11px;color:var(--muted);margin:0 6px 6px}
+  .bub-t.mine{align-self:flex-end}
+  .chat-empty{margin:auto 0;text-align:center;color:var(--muted);font-size:14.5px;padding:30px 10px}
+  .quick{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:8px}
+  .chat-comp{position:sticky;bottom:calc(var(--tbh,72px) + 6px);display:flex;gap:8px;align-items:flex-end;background:var(--bg);padding:8px 0 10px;border-top:1px solid var(--line)}
+  .chat-comp textarea{flex:1;min-width:0;resize:none;max-height:120px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:20px;padding:10px 14px;font:500 16px/1.35 var(--f-body)}
+  .chat-comp .btn{width:auto;flex:none;border-radius:20px;padding:10px 16px;font-size:15px}`;
   document.head.appendChild(css);
   const main = document.createElement('main'); main.id = 'tabSocial'; main.hidden = true;
   document.querySelector('.app').appendChild(main);
@@ -78,11 +113,12 @@
     _render();
     main.hidden = S.tab !== 'social'; tb.classList.toggle('on', S.tab === 'social');
     if (S.tab === 'social'){ document.getElementById('viewSeg').hidden = true; renderSocial(); if (!loading && me) load(); }
+    else if (chat){ chat = null; }
   };
 
   // ---------- data ----------
   async function ensureProfile(){
-    const {data} = await sb().from('goliath_profiles').select('user_id, email, name, share').eq('user_id', me.id).maybeSingle();
+    const {data} = await sb().from('goliath_profiles').select('user_id, email, name, share, presence').eq('user_id', me.id).maybeSingle();
     if (!data){
       const {data: d} = await sb().from('goliath_profiles').insert({user_id: me.id, email: myEmail(), name: myName()}).select().maybeSingle();
       profile = d || {share: true};
@@ -98,20 +134,23 @@
   async function load(){
     if (!me || loading) return; loading = true; err = '';
     try {
-      const [fr, wk, sh] = await Promise.all([
+      const [fr, wk, sh, ms] = await Promise.all([
         sb().from('goliath_friends').select('*').order('created_at', {ascending: false}),
         sb().from('goliath_workouts').select('*').gte('done_at', new Date(Date.now() - 28 * 864e5).toISOString()).order('done_at', {ascending: false}).limit(200),
-        sb().from('goliath_program_shares').select('*').eq('recipient', me.id).order('created_at', {ascending: false}).limit(30)
+        sb().from('goliath_program_shares').select('*').eq('recipient', me.id).order('created_at', {ascending: false}).limit(30),
+        sb().from('goliath_messages').select('*').gte('created_at', new Date(Date.now() - 90 * 864e5).toISOString()).order('created_at', {ascending: false}).limit(1000)
       ]);
       if (fr.error || wk.error) throw (fr.error || wk.error);
       shares = sh.error ? [] : (sh.data || []);
+      if (!ms.error){ const pend = msgs.filter(m => m.pending); msgs = (ms.data || []).reverse().concat(pend); }
       friends = fr.data || []; feed = wk.data || [];
       const ids = [...new Set(friends.filter(f => f.status === 'accepted').map(f => f.requester === me.id ? f.addressee : f.requester).filter(Boolean))];
       profiles = {};
-      if (ids.length){ const {data} = await sb().from('goliath_profiles').select('user_id, name, email').in('user_id', ids); (data || []).forEach(p => profiles[p.user_id] = p); }
+      if (ids.length){ const {data} = await sb().from('goliath_profiles').select('user_id, name, email, last_seen, activity').in('user_id', ids); (data || []).forEach(p => profiles[p.user_id] = p); }
       loaded = true;
     } catch(e){ err = navigator.onLine ? 'Could not load Social just now. Pull down or reopen the tab to retry.' : 'You are offline. Social updates when you reconnect.'; }
     loading = false; paintBadge(); if (S.tab === 'social') renderSocial();
+    if (chat) markRead(chat);
   }
   const incoming = () => friends.filter(f => f.status === 'pending' && f.addressee_email === myEmail());
   const outgoing = () => friends.filter(f => f.status === 'pending' && f.requester === me.id);
@@ -124,11 +163,85 @@
   }
   const initialOf = uid => (uid === me.id ? (myName() || myEmail()) : nameOf(uid))[0].toUpperCase();
   function paintBadge(){
-    const n = incoming().length + shares.length; let d = tb.querySelector('.tab-dot');
+    const n = incoming().length + shares.length + unreadAll(); let d = tb.querySelector('.tab-dot');
     if (!n){ if (d) d.remove(); return; }
     if (!d){ d = document.createElement('span'); d.className = 'tab-dot'; tb.appendChild(d); }
     d.textContent = n; tb.setAttribute('aria-label', `Social, ${n} new`);
   }
+
+  // ---------- online status ----------
+  function presenceOf(uid){
+    const p = profiles[uid]; if (!p || !p.last_seen) return {on: false, txt: ''};
+    const age = Date.now() - Date.parse(p.last_seen), on = age < ONLINE_MS && p.activity !== 'off';
+    if (on) return {on: true, txt: p.activity || 'Online'};
+    return {on: false, txt: age < 14 * 864e5 ? 'Active ' + ago(p.last_seen).replace(/^Yesterday/, 'yesterday') : ''};
+  }
+  const avHTML = (uid, cls) => `<span class="avw"><span class="av${cls ? ' ' + cls : ''}" aria-hidden="true">${esc(initialOf(uid))}</span>${uid !== me.id && presenceOf(uid).on ? '<i class="on-dot" aria-hidden="true"></i>' : ''}</span>`;
+  function myActivity(){
+    if (document.visibilityState !== 'visible') return 'off';
+    const di = S.gymDay;
+    if (lastSetAt && Date.now() - lastSetAt < 30 * 60000 && typeof GP !== 'undefined' && GP && GP.days_ && GP.days_[di]) return ('Working out · ' + GP.days_[di].name).slice(0, 80);
+    return '';
+  }
+  async function beat(){
+    if (!me || !profile || profile.presence === false) return;
+    lastBeat = Date.now();
+    try { await sb().from('goliath_profiles').update({last_seen: new Date().toISOString(), activity: myActivity()}).eq('user_id', me.id); } catch(e){}
+  }
+  // ticking off a set marks you as working out (at most one update every 20 s)
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-set]')){ const was = myActivity(); lastSetAt = Date.now(); if (me && (Date.now() - lastBeat > 20000 || was !== myActivity())) beat(); } }, true);
+  setInterval(() => { if (me && document.visibilityState === 'visible') beat(); }, 60000);
+  setInterval(() => { if (me && document.visibilityState === 'visible' && S.tab === 'social' && !loading) load(); }, 30000);
+
+  // ---------- messages ----------
+  const unreadFrom = uid => msgs.filter(m => m.sender === uid && m.recipient === me.id && !m.read_at).length;
+  const unreadAll = () => me ? msgs.filter(m => m.recipient === me.id && !m.read_at && accepted().some(f => otherOf(f) === m.sender)).length : 0;
+  const thread = uid => msgs.filter(m => (m.sender === uid && m.recipient === me.id) || (m.sender === me.id && m.recipient === uid));
+  async function markRead(uid){
+    const un = msgs.filter(m => m.sender === uid && m.recipient === me.id && !m.read_at); if (!un.length) return;
+    const t = new Date().toISOString(); un.forEach(m => m.read_at = t); paintBadge();
+    await sb().from('goliath_messages').update({read_at: t}).eq('sender', uid).eq('recipient', me.id).is('read_at', null);
+  }
+  async function sendMsg(uid, body){
+    body = body.trim().slice(0, 1000); if (!body) return false;
+    const tmp = {id: 'tmp' + Date.now() + Math.random(), sender: me.id, recipient: uid, body, created_at: new Date().toISOString(), read_at: null, pending: true};
+    msgs.push(tmp); if (chat === uid) paintChat(true);
+    const {data, error} = await sb().from('goliath_messages').insert({sender: me.id, recipient: uid, body}).select().maybeSingle();
+    const i = msgs.indexOf(tmp);
+    if (error || !data){ if (i >= 0) msgs.splice(i, 1); if (chat === uid) paintChat(); toast(navigator.onLine ? 'Message not sent. Try again.' : 'You are offline. Message not sent.'); return false; }
+    if (msgs.some(m => m.id === data.id)) msgs.splice(i, 1); else msgs[i] = data;
+    if (chat === uid) paintChat();
+    return true;
+  }
+  function onMsg(m){
+    if (!m || msgs.some(x => x.id === m.id)) return;
+    msgs.push(m);
+    if (m.recipient === me.id){
+      if (chat === m.sender && S.tab === 'social' && document.visibilityState === 'visible') markRead(m.sender);
+      else { toast(`${nameOf(m.sender)}: ${m.body.slice(0, 70)}`); if (navigator.vibrate) try { navigator.vibrate(60); } catch(e){} }
+    }
+    paintBadge(); if (S.tab === 'social') renderSocial();
+  }
+  function onMsgUpdate(m){ const x = msgs.find(y => y.id === m.id); if (x){ x.read_at = m.read_at; if (chat === x.recipient) paintChat(); } }
+  function subscribe(){
+    unsubscribe();
+    try {
+      rt = sb().channel('goliath-dm-' + me.id)
+        .on('postgres_changes', {event: 'INSERT', schema: 'public', table: 'goliath_messages', filter: 'recipient=eq.' + me.id}, p => onMsg(p.new))
+        .on('postgres_changes', {event: 'UPDATE', schema: 'public', table: 'goliath_messages', filter: 'sender=eq.' + me.id}, p => onMsgUpdate(p.new))
+        .subscribe(st => { rtOk = st === 'SUBSCRIBED'; });
+    } catch(e){ rtOk = false; }
+  }
+  function unsubscribe(){ if (rt){ try { sb().removeChannel(rt); } catch(e){} rt = null; } rtOk = false; }
+  // if the live connection is down, check for new messages every few seconds while a chat is open
+  async function pullMsgs(){
+    if (!me) return;
+    const since = msgs.filter(m => !m.pending).reduce((t, m) => m.created_at > t ? m.created_at : t, new Date(Date.now() - 90 * 864e5).toISOString());
+    const {data} = await sb().from('goliath_messages').select('*').gte('created_at', since).order('created_at', {ascending: true}).limit(200);
+    (data || []).forEach(m => { const x = msgs.find(y => y.id === m.id); if (x) x.read_at = m.read_at; else onMsg(m); });
+    if (chat) paintChat();
+  }
+  setInterval(() => { if (me && chat && !rtOk && S.tab === 'social' && document.visibilityState === 'visible') pullMsgs(); }, 5000);
 
   // ---------- posting finished workouts ----------
   const _submit = submitReview;
@@ -197,23 +310,30 @@
   function wkCard(w){
     const who = w.user_id === me.id;
     return `<div class="wk">
-      <div class="pp"><span class="av${who ? ' me' : ''}" aria-hidden="true">${esc(initialOf(w.user_id))}</span><span><b>${esc(nameOf(w.user_id))}</b><small>${esc(ago(w.done_at))}</small></span></div>
+      <div class="pp">${avHTML(w.user_id, who ? 'me' : '')}<span><b>${esc(nameOf(w.user_id))}</b><small>${esc(ago(w.done_at))}</small></span></div>
       <div class="what">Finished <b>${esc(w.day_name)}</b>${w.plan_name ? ` · ${esc(w.plan_name)}` : ''}</div>
       ${w.highlights && w.highlights.length ? `<div class="hl">${w.highlights.map(h => `<span>${esc(h.n)} ${esc(h.w)}${w.unit === 'kg' ? ' kg' : ''} × ${esc(h.r)}</span>`).join('')}</div>` : ''}
-      <div class="meta">${w.rating ? `<span class="rate-chip">${w.rating}/5 · ${esc(RATE_N(w.rating))}</span>` : ''}${w.sets_done ? `<span>${w.sets_done} sets</span>` : ''}</div>
+      <div class="meta">${w.rating ? `<span class="rate-chip">${w.rating}/5 · ${esc(RATE_N(w.rating))}</span>` : ''}${w.sets_done ? `<span>${w.sets_done} sets</span>` : ''}${!who ? (() => { const done = cheerSent(w); return `<span style="margin-left:auto"><button class="cheer" data-soc="cheer" data-id="${w.id}" ${done ? 'disabled' : ''}>${done ? 'Cheered' : '💪 Cheer'}</button></span>`; })() : ''}</div>
     </div>`;
   }
+  const cheerText = w => `💪 Nice work on ${w.day_name}!`;
+  const cheerSent = w => thread(w.user_id).some(m => m.sender === me.id && m.body === cheerText(w) && m.created_at >= w.done_at);
   function weekDots(uid){
     const since = Date.now() - 7 * 864e5, n = feed.filter(w => w.user_id === uid && Date.parse(w.done_at) > since).length;
     return {n, html: `<span class="wkdots" aria-label="${n} workout${n === 1 ? '' : 's'} in the last 7 days">${[0,1,2,3,4,5].map(i => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</span>`};
   }
   function renderSocial(){
     if (!me){ main.innerHTML = ''; return; }
+    if (chat) return renderChat();
+    const keep = main.querySelector('#socEmail'), kv = keep ? keep.value : '', kf = keep && document.activeElement === keep;
+    const nk = main.querySelector('#socNote'); if (nk && send) send.note = nk.value;
     const inc = incoming(), out = outgoing(), acc = accepted();
     const mine = weekDots(me.id);
+    const live = acc.map(otherOf).filter(u => u && presenceOf(u).on);
     main.innerHTML = `<div class="soc">
       <div><div class="eyebrow">Social</div><h1 class="display">Your crew</h1>
       <p class="lede" style="margin-top:8px">Add friends by email and keep up with each other's workouts. They only see what you finish in the Gym tab, never your body stats, injuries or notes.</p></div>
+      ${live.length ? `<div class="panel"><div class="eyebrow" style="margin-bottom:10px">Online now</div><div class="online-strip">${live.map(u => `<button data-soc="chat" data-uid="${u}" aria-label="Message ${esc(nameOf(u))}, ${esc(presenceOf(u).txt)}">${avHTML(u)}<small>${esc(nameOf(u).split(' ')[0])}</small></button>`).join('')}</div></div>` : ''}
       <form class="panel add" id="socAdd" novalidate>
         <label class="eyebrow" for="socEmail">Add a friend</label>
         <div class="inrow"><input id="socEmail" type="email" inputmode="email" autocomplete="off" placeholder="friend@email.com" aria-label="Friend's email"><button class="btn" type="submit" ${sending ? 'disabled' : ''}>${sending ? 'Sending…' : 'Send'}</button></div>
@@ -224,18 +344,68 @@
       ${err ? `<div class="panel" role="alert" style="color:var(--red)">${esc(err)}</div>` : ''}
       ${inc.length ? `<div class="panel"><h3>Friend requests</h3>${inc.map(f => `<div class="req"><div class="pp"><span class="av" aria-hidden="true">${esc((f.requester_name || f.requester_email)[0].toUpperCase())}</span><span><b>${esc(f.requester_name || f.requester_email)}</b><small>${esc(f.requester_email)} wants to share workouts</small></span></div><div class="row"><button class="chip sm ink on" data-soc="accept" data-id="${f.id}">Accept</button><button class="chip sm" data-soc="decline" data-id="${f.id}">Decline</button></div></div>`).join('')}</div>` : ''}
       <div class="panel"><h3>This week</h3>
-        <div class="fr"><div class="pp"><span class="av me" aria-hidden="true">${esc(initialOf(me.id))}</span><span><b>You</b><small>${mine.n} workout${mine.n === 1 ? '' : 's'} in the last 7 days</small></span>${mine.html}</div></div>
+        <div class="fr"><div class="pp">${avHTML(me.id, 'me')}<span><b>You</b><small>${mine.n} workout${mine.n === 1 ? '' : 's'} in the last 7 days</small></span>${mine.html}</div></div>
         ${acc.map(f => { const uid = otherOf(f); if (!uid) return ''; const d = weekDots(uid); const last = feed.find(w => w.user_id === uid); const isOpen = open === uid;
-          return `<div class="fr"><button class="pp" data-soc="open" data-uid="${uid}" aria-expanded="${isOpen}"><span class="av" aria-hidden="true">${esc(initialOf(uid))}</span><span><b>${esc(nameOf(uid))}</b><small>${last ? `Last: ${esc(last.day_name)}, ${esc(ago(last.done_at))}` : 'No workouts shared yet'}</small></span>${d.html}</button>
-          ${isOpen ? `${feed.filter(w => w.user_id === uid).slice(0, 5).map(wkCard).join('') || '<p class="empty">Nothing in the last 4 weeks.</p>'}<div class="row"><button class="chip sm ink on" style="flex:none" data-soc="sendto" data-uid="${uid}">Send a program</button>${confirmRemove === f.id ? `<button class="chip sm" style="color:var(--red);flex:none" data-soc="remove" data-id="${f.id}">Remove ${esc(nameOf(uid))}</button><button class="chip sm" style="flex:none" data-soc="keep">Keep</button>` : `<button class="chip sm" style="flex:none" data-soc="askremove" data-id="${f.id}">Remove friend</button>`}</div>` : ''}</div>`; }).join('')}
+          const pr = presenceOf(uid), un = unreadFrom(uid), lm = thread(uid).slice(-1)[0];
+          const line = un && lm ? {c: 'new', t: lm.body} : pr.on ? {c: 'live', t: pr.txt} : last ? {c: '', t: `Last: ${last.day_name}, ${ago(last.done_at)}`} : pr.txt ? {c: '', t: pr.txt} : {c: '', t: 'No workouts shared yet'};
+          return `<div class="fr"><div class="frrow"><button class="pp" data-soc="open" data-uid="${uid}" aria-expanded="${isOpen}">${avHTML(uid)}<span><b>${esc(nameOf(uid))}</b><small class="${line.c}">${esc(line.t)}</small></span>${d.html}</button><button class="msgbtn" data-soc="chat" data-uid="${uid}" aria-label="Message ${esc(nameOf(uid))}${un ? `, ${un} unread` : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/></svg>${un ? `<span class="tab-dot">${un}</span>` : ''}</button></div>
+          ${isOpen ? `${feed.filter(w => w.user_id === uid).slice(0, 5).map(wkCard).join('') || '<p class="empty">Nothing in the last 4 weeks.</p>'}<div class="row" style="flex-wrap:wrap"><button class="chip sm ink on" style="flex:none" data-soc="chat" data-uid="${uid}">Message</button><button class="chip sm" style="flex:none" data-soc="sendto" data-uid="${uid}">Send a program</button>${confirmRemove === f.id ? `<button class="chip sm" style="color:var(--red);flex:none" data-soc="remove" data-id="${f.id}">Remove ${esc(nameOf(uid))}</button><button class="chip sm" style="flex:none" data-soc="keep">Keep</button>` : `<button class="chip sm" style="flex:none" data-soc="askremove" data-id="${f.id}">Remove friend</button>`}</div>` : ''}</div>`; }).join('')}
         ${!acc.length ? `<p class="empty">${loaded ? 'No friends yet. Add someone by email above.' : 'Loading…'}</p>` : ''}
       </div>
       ${acc.length && !send ? `<button class="btn ghost" data-soc="sendopen">Send a program to a friend</button>` : ''}
       ${acc.length ? `<div><div class="eyebrow" style="margin:4px 0 10px">Recent workouts</div><div style="display:grid;gap:10px">${feed.slice(0, 25).map(wkCard).join('') || '<p class="empty">No workouts yet. Finish one in the Gym tab and it shows up here.</p>'}</div></div>` : ''}
       ${out.length ? `<div class="panel"><h3>Waiting for a reply</h3>${out.map(f => `<div class="req"><div class="pp"><span class="av" aria-hidden="true" style="background:var(--muted)">${esc(f.addressee_email[0].toUpperCase())}</span><span><b>${esc(f.addressee_email)}</b><small>Sent ${esc(ago(f.created_at))}</small></span><button class="chip sm" style="flex:none" data-soc="cancel" data-id="${f.id}">Cancel</button></div></div>`).join('')}</div>` : ''}
+      <div class="panel switch"><div><b>Show when I'm online</b><br><span>${profile && profile.presence === false ? 'Friends can\'t see when you\'re on the app.' : 'Friends see a green dot, and "Working out" while you log sets.'}</span></div><button role="switch" aria-checked="${!(profile && profile.presence === false)}" aria-label="Show when I'm online" data-soc="presence"></button></div>
       <div class="panel switch"><div><b>Share my workouts</b><br><span>${profile && profile.share === false ? 'Friends can\'t see your workouts right now.' : 'Friends see each workout you finish.'}</span></div><button role="switch" aria-checked="${!(profile && profile.share === false)}" aria-label="Share my workouts with friends" data-soc="share"></button></div>
     </div>`;
+    if (kv || kf){ const el = main.querySelector('#socEmail'); if (el){ el.value = kv; if (kf) el.focus(); } }
   }
+
+  // ---------- chat screen ----------
+  function dayLabel(t){
+    const d = new Date(t), n = new Date(), y = new Date(); y.setDate(n.getDate() - 1);
+    if (d.toDateString() === n.toDateString()) return 'Today';
+    if (d.toDateString() === y.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString(undefined, {weekday: 'short', month: 'short', day: 'numeric'});
+  }
+  const clock = t => new Date(t).toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit'});
+  function renderChat(){
+    const uid = chat, f = accepted().find(x => otherOf(x) === uid);
+    if (!f){ chat = null; return renderSocial(); }
+    let shell = main.querySelector('#chatShell');
+    if (!shell || shell.dataset.uid !== uid){
+      main.innerHTML = `<div class="soc chat" id="chatShell" data-uid="${uid}">
+        <div class="chat-head"><button class="chip sm" data-soc="chatback">‹ Crew</button><div class="pp" id="chatWho"></div></div>
+        <div class="chat-list" id="chatList" role="log" aria-live="polite" aria-label="Messages with ${esc(nameOf(uid))}"></div>
+        <form class="chat-comp" id="chatForm"><textarea id="chatIn" rows="1" maxlength="1000" placeholder="Message ${esc(nameOf(uid).split(' ')[0])}" aria-label="Message ${esc(nameOf(uid))}"></textarea><button class="btn" type="submit">Send</button></form>
+      </div>`;
+      paintChat(true, true);
+    } else paintChat();
+  }
+  function paintChat(toEnd, first){
+    const uid = chat, list = main.querySelector('#chatList'); if (!list || !uid) return;
+    const tb = document.querySelector('.tabbar'), hd = document.querySelector('header.top');
+    document.documentElement.style.setProperty('--tbh', (tb ? tb.offsetHeight : 72) + 'px');
+    document.documentElement.style.setProperty('--hdr', (hd && getComputedStyle(hd).position === 'sticky' ? hd.offsetHeight : 0) + 'px');
+    const pr = presenceOf(uid);
+    main.querySelector('#chatWho').innerHTML = `${avHTML(uid)}<span><b>${esc(nameOf(uid))}</b><small class="${pr.on ? 'live' : ''}">${esc(pr.txt || 'Friends since ' + dayLabel(accepted().find(x => otherOf(x) === uid).created_at))}</small></span>`;
+    const nearEnd = window.innerHeight + window.scrollY > document.documentElement.scrollHeight - 140;
+    const T = thread(uid);
+    let html = '', lastDay = '';
+    const lastMine = [...T].reverse().find(m => m.sender === me.id);
+    T.forEach((m, i) => {
+      const dl = dayLabel(m.created_at); if (dl !== lastDay){ html += `<div class="chat-day">${esc(dl)}</div>`; lastDay = dl; }
+      const mine = m.sender === me.id, nx = T[i + 1];
+      html += `<div class="bub${mine ? ' mine' : ''}${m.pending ? ' pending' : ''}">${esc(m.body)}</div>`;
+      const gap = !nx || nx.sender !== m.sender || Date.parse(nx.created_at) - Date.parse(m.created_at) > 5 * 60000 || dayLabel(nx.created_at) !== dl;
+      if (gap) html += `<div class="bub-t${mine ? ' mine' : ''}">${m.pending ? 'Sending…' : clock(m.created_at)}${m === lastMine && m.read_at ? ' · Seen' : ''}</div>`;
+    });
+    if (!T.length) html = `<div class="chat-empty">Say hi to ${esc(nameOf(uid).split(' ')[0])}. Only the two of you can see these messages.<div class="quick" style="justify-content:center;margin-top:14px">${['💪 Gym today?', 'What time are you going?', 'Want to train together this week?'].map(q => `<button class="chip sm" data-soc="quick" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`;
+    list.innerHTML = html;
+    if (toEnd || nearEnd) requestAnimationFrame(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    if (first){ markRead(uid); const ta = main.querySelector('#chatIn'); if (ta && matchMedia('(pointer:fine)').matches) ta.focus(); }
+  }
+  function openChat(uid){ chat = uid; S.tab = 'social'; render(); markRead(uid); if (!rtOk) pullMsgs(); }
   function sendPanel(){
     const C = progChoices(), F = accepted().map(otherOf).filter(Boolean);
     if (send.prog && !C.some(c => c.key === send.prog)) send.prog = null;
@@ -251,6 +421,12 @@
   }
   main.addEventListener('submit', async e => {
     e.preventDefault();
+    if (e.target.id === 'chatForm'){
+      const ta = main.querySelector('#chatIn'), v = ta.value; if (!v.trim()) return;
+      ta.value = ''; ta.style.height = ''; ta.focus();
+      if (!(await sendMsg(chat, v)) && !ta.value) ta.value = v;
+      return;
+    }
     const el = main.querySelector('#socEmail'); const email = (el.value || '').trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)){ formMsg = {k: 'err', t: 'Enter a valid email address.'}; return renderSocial(); }
     if (email === myEmail()){ formMsg = {k: 'err', t: 'That\'s your own email.'}; return renderSocial(); }
@@ -261,12 +437,20 @@
     formMsg = error ? {k: 'err', t: /duplicate|unique/i.test(error.message) ? 'You already sent that person a request.' : 'Could not send the request. Try again.'} : {k: 'ok', t: `Request sent to ${email}.`};
     if (!error) await load(); else renderSocial();
   });
-  main.addEventListener('input', e => { if (e.target.id === 'socEmail' && formMsg){ formMsg = null; const m = main.querySelector('.soc .msg'); if (m) m.remove(); } });
+  main.addEventListener('keydown', e => {
+    if (e.target.id === 'chatIn' && e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches){ e.preventDefault(); main.querySelector('#chatForm').requestSubmit(); }
+  });
+  main.addEventListener('input', e => {
+    if (e.target.id === 'chatIn'){ const t = e.target; t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight + 3) + 'px'; return; } if (e.target.id === 'socEmail' && formMsg){ formMsg = null; const m = main.querySelector('.soc .msg'); if (m) m.remove(); } });
   main.addEventListener('click', async e => {
     const b = e.target.closest('[data-soc]'); if (!b) return;
     const a = b.dataset.soc, id = b.dataset.id;
     if (a === 'open'){ open = open === b.dataset.uid ? null : b.dataset.uid; confirmRemove = null; return renderSocial(); }
     if (a === 'askremove'){ confirmRemove = id; return renderSocial(); }
+    if (a === 'chat'){ open = null; return openChat(b.dataset.uid); }
+    if (a === 'chatback'){ chat = null; renderSocial(); window.scrollTo(0, 0); return; }
+    if (a === 'quick'){ return sendMsg(chat, b.dataset.q); }
+    if (a === 'cheer'){ const w = feed.find(x => x.id === id); if (!w) return; b.disabled = true; b.textContent = 'Cheered'; if (await sendMsg(w.user_id, cheerText(w))) toast(`Cheer sent to ${nameOf(w.user_id)}`); else { b.disabled = false; b.textContent = '💪 Cheer'; } return renderSocial(); }
     if (a === 'keep'){ confirmRemove = null; return renderSocial(); }
     const keepNote = () => { const n = main.querySelector('#socNote'); if (n && send) send.note = n.value; };
     if (a === 'sendopen' || a === 'sendto'){ send = {prog: null, friend: b.dataset.uid || (accepted().length === 1 ? otherOf(accepted()[0]) : null), note: ''}; renderSocial(); main.querySelector('#socSend').scrollIntoView({block: 'start'}); return; }
@@ -289,6 +473,12 @@
     if (a === 'accept'){ const {error} = await sb().from('goliath_friends').update({status: 'accepted', addressee: me.id}).eq('id', id); toast(error ? 'Could not accept. Try again.' : 'You\'re now friends'); }
     if (a === 'shdrop'){ await sb().from('goliath_program_shares').delete().eq('id', id); shares = shares.filter(x => x.id !== id); paintBadge(); toast('Dismissed'); return renderSocial(); }
     if (a === 'decline' || a === 'cancel' || a === 'remove'){ const {error} = await sb().from('goliath_friends').delete().eq('id', id); confirmRemove = null; open = null; toast(error ? 'Could not update. Try again.' : a === 'remove' ? 'Friend removed' : a === 'cancel' ? 'Request cancelled' : 'Request declined'); }
+    if (a === 'presence'){
+      const next = profile && profile.presence === false;
+      const {error} = await sb().from('goliath_profiles').update(next ? {presence: true, last_seen: new Date().toISOString(), activity: myActivity()} : {presence: false, last_seen: null, activity: 'off'}).eq('user_id', me.id);
+      if (!error){ profile.presence = next; toast(next ? 'Friends can see when you\'re online' : 'Online status hidden'); } else toast('Could not change that. Try again.');
+      return renderSocial();
+    }
     if (a === 'share'){ const next = !(profile && profile.share === false) ? false : true; const {error} = await sb().from('goliath_profiles').update({share: next}).eq('user_id', me.id); if (!error){ profile.share = next; toast(next ? 'Sharing your workouts' : 'Workouts hidden from friends'); } else toast('Could not change sharing. Try again.'); return renderSocial(); }
     formMsg = null; await load();
   });
@@ -297,12 +487,17 @@
   window.addEventListener('goliath:signin', async e => {
     me = e.detail; tb.hidden = false;
     try { await ensureProfile(); await claimRequests(); } catch(err){}
-    load();
+    subscribe(); beat(); load();
   });
   window.addEventListener('goliath:signout', () => {
+    unsubscribe(); chat = null; msgs = [];
     me = null; profile = null; friends = []; shares = []; send = null; feed = []; profiles = {}; loaded = false; open = null; formMsg = null;
     tb.hidden = true; paintBadge(); if (S.tab === 'social'){ S.tab = 'body'; render(); }
   });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && me) load(); });
-  if (AUTH.user){ me = AUTH.user; tb.hidden = false; ensureProfile().then(claimRequests).then(load).catch(load); }
+  document.addEventListener('visibilitychange', () => {
+    if (!me) return;
+    beat();                                            // 'off' when hidden, so friends see you leave right away
+    if (document.visibilityState === 'visible'){ if (!rtOk) subscribe(); load(); }
+  });
+  if (AUTH.user){ me = AUTH.user; tb.hidden = false; ensureProfile().then(claimRequests).then(() => { subscribe(); beat(); load(); }).catch(load); }
 })();

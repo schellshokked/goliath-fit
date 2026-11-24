@@ -145,3 +145,36 @@ create policy "Either side can delete" on public.goliath_program_shares for dele
   using (sender = (select auth.uid()) or recipient = (select auth.uid()));
 revoke all on public.goliath_program_shares from anon;
 grant select, insert, delete on public.goliath_program_shares to authenticated;
+
+
+-- =====================================================================
+-- Migration "goliath_presence_messages": online status and direct messages between friends.
+alter table public.goliath_profiles
+  add column last_seen timestamptz,
+  add column activity  text not null default '' check (char_length(activity) <= 80),
+  add column presence  boolean not null default true;
+
+create table public.goliath_messages (
+  id         uuid primary key default gen_random_uuid(),
+  sender     uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  recipient  uuid not null references auth.users(id) on delete cascade,
+  body       text not null check (char_length(btrim(body)) between 1 and 1000),
+  created_at timestamptz not null default now(),
+  read_at    timestamptz
+);
+create index goliath_messages_recipient_idx on public.goliath_messages (recipient, created_at desc);
+create index goliath_messages_sender_idx on public.goliath_messages (sender, created_at desc);
+alter table public.goliath_messages enable row level security;
+create policy "See your own conversations" on public.goliath_messages for select to authenticated
+  using (sender = (select auth.uid()) or recipient = (select auth.uid()));
+create policy "Message your friends" on public.goliath_messages for insert to authenticated
+  with check (sender = (select auth.uid()) and recipient <> (select auth.uid()) and read_at is null
+              and private.goliath_are_friends((select auth.uid()), recipient));
+create policy "Recipient marks read" on public.goliath_messages for update to authenticated
+  using (recipient = (select auth.uid())) with check (recipient = (select auth.uid()));
+create policy "Sender can unsend" on public.goliath_messages for delete to authenticated
+  using (sender = (select auth.uid()));
+revoke all on public.goliath_messages from anon;
+grant select, insert, delete on public.goliath_messages to authenticated;
+grant update (read_at) on public.goliath_messages to authenticated;
+alter publication supabase_realtime add table public.goliath_messages;
