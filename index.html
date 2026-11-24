@@ -2418,11 +2418,17 @@ document.addEventListener('input',ev=>{
 builds();
 if(location.hash==='#gym')S.tab='gym';
 rebuild();render();
-if('serviceWorker' in navigator&&location.protocol!=='file:'){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
+if('serviceWorker' in navigator&&location.protocol!=='file:'){
+  const t0=Date.now(),had=!!navigator.serviceWorker.controller;let reloaded=false;
+  // a new version took over right after opening: reload once so the new code runs now, not next launch
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{if(had&&!reloaded&&Date.now()-t0<15000&&!S.review){reloaded=true;location.reload();}});
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{}));
+}
 </script>
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="auth.js"></script>
+<script src="social.js"></script>
 
 </body>
 </html>

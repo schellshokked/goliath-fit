@@ -78,11 +78,12 @@
     else { clearLocal(); writeLocal(); resetView(); localStorage.setItem(OWNER, u.id); pushNow(); }   // new account: create its row right away
     localStorage.setItem(OWNER, u.id);
     paintAvatar(); paintStatus();
+    window.dispatchEvent(new CustomEvent('goliath:signin', {detail: u}));
   }
   async function signOut(){
     if (pending) await pushNow();
     await sb.auth.signOut();
-    closeMenu(); user = null; paintAvatar(); clearLocal(); localStorage.removeItem(OWNER); resetView(); showGate('in');
+    closeMenu(); user = null; paintAvatar(); window.dispatchEvent(new CustomEvent('goliath:signout')); clearLocal(); localStorage.removeItem(OWNER); resetView(); showGate('in');
   }
 
   // ---------- sign-in screen ----------
@@ -215,7 +216,7 @@
     e.preventDefault(); const v = (menu.querySelector('#acctName') || {}).value || ''; if (!v.trim()) return;
     const {data, error} = await sb.auth.updateUser({data: {name: v.trim()}});
     if (error){ toast('Could not save your name. Try again.'); return; }
-    user = data.user; paintAvatar(); openMenu(); toast('Thanks, ' + firstName());
+    user = data.user; paintAvatar(); openMenu(); toast('Thanks, ' + firstName()); window.dispatchEvent(new CustomEvent('goliath:signin', {detail: user}));
   });
   const _renderPlan = renderPlan;
   renderPlan = function(){
@@ -241,7 +242,7 @@
     return;
   }
   sb = window.supabase.createClient(CFG.url, CFG.anonKey, {auth: {persistSession: true, autoRefreshToken: true, detectSessionInUrl: true}});
-  window.__goliathAuth = {get user(){ return user; }, pushNow, refresh};
+  window.__goliathAuth = {get user(){ return user; }, get sb(){ return sb; }, pushNow, refresh};
   sb.auth.onAuthStateChange((ev, session) => { if (ev === 'PASSWORD_RECOVERY') showGate('newpw'); });
   sb.auth.getSession().then(({data}) => {
     if (/type=recovery/.test(location.hash)) return;      // the recovery event shows the new-password form

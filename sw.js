@@ -1,6 +1,6 @@
 // Goliath Strength Trainer offline support. Bump VERSION whenever index.html changes.
-const VERSION = 'goliath-v18';
-const SHELL = ['./', './index.html', './config.js', './auth.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
+const VERSION = 'goliath-v19';
+const SHELL = ['./', './index.html', './config.js', './auth.js', './social.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -18,8 +18,14 @@ self.addEventListener('fetch', e => {
       .catch(() => caches.match('./index.html')));
     return;
   }
-  // Fonts and app files: cache first, refresh in the background.
-  if (url.origin === location.origin || /fonts\.(googleapis|gstatic)\.com$|^cdn\.jsdelivr\.net$/.test(url.hostname)) {
+  // App files: network first so a new version is used as soon as it is deployed; cache when offline.
+  if (url.origin === location.origin) {
+    e.respondWith(fetch(req).then(r => { if (r.ok) { const copy = r.clone(); caches.open(VERSION).then(c => c.put(req, copy)); } return r; })
+      .catch(() => caches.match(req).then(hit => hit || caches.match(req, {ignoreSearch: true}))));
+    return;
+  }
+  // Fonts and the pinned Supabase library never change: cache first, refresh in the background.
+  if (/fonts\.(googleapis|gstatic)\.com$|^cdn\.jsdelivr\.net$/.test(url.hostname)) {
     e.respondWith(caches.match(req).then(hit => {
       const net = fetch(req).then(r => { if (r.ok || r.type === 'opaque') { const copy = r.clone(); caches.open(VERSION).then(c => c.put(req, copy)); } return r; }).catch(() => hit);
       return hit || net;
