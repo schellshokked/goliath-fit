@@ -311,11 +311,19 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .mv svg{width:100%;max-width:130px;height:auto;display:block}
 .mv figcaption{font:600 10.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .mv-arr{color:var(--muted);font-weight:700;flex:none}
-.mv-l{fill:none;stroke:var(--ink);stroke-width:4.2;stroke-linecap:round;stroke-linejoin:round}
-.mv-h{fill:var(--ink)}
-.mv-k{fill:var(--accent)}
-.mv-c{stroke:var(--accent);stroke-width:1.6;stroke-linecap:round}
-.mv-b{fill:var(--muted);opacity:.45}
+.mv-bd,.mv-far,.mv-hi,.mv-hi2{stroke-linecap:round}
+line.mv-bd{stroke:color-mix(in srgb,var(--ink) 62%,var(--surface))} circle.mv-bd,path.mv-bd{fill:color-mix(in srgb,var(--ink) 62%,var(--surface));stroke:color-mix(in srgb,var(--ink) 62%,var(--surface))}
+line.mv-far{stroke:color-mix(in srgb,var(--ink) 30%,var(--surface))} circle.mv-far{fill:color-mix(in srgb,var(--ink) 30%,var(--surface))}
+line.mv-hi{stroke:var(--accent)} circle.mv-hi,path.mv-hi{fill:var(--accent);stroke:var(--accent)}
+line.mv-hi2{stroke:color-mix(in srgb,var(--accent) 45%,var(--surface))} circle.mv-hi2,path.mv-hi2{fill:color-mix(in srgb,var(--accent) 45%,var(--surface));stroke:color-mix(in srgb,var(--accent) 45%,var(--surface))}
+.mv-hd{fill:color-mix(in srgb,var(--ink) 62%,var(--surface))}
+.mv-k{fill:var(--ink)}
+.mv-c{stroke:var(--ink);stroke-width:1.6;stroke-linecap:round;opacity:.7}
+.mv-b{fill:var(--muted);opacity:.35}
+.mv-wrap{display:grid;gap:6px}
+.mv-key{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0;font-size:12px;color:var(--muted)}
+.mv-key i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.mv-key i.k1{background:var(--accent)} .mv-key i.k2{background:color-mix(in srgb,var(--accent) 45%,var(--surface));margin-left:8px}
 .mv-f{stroke:var(--line);stroke-width:2;stroke-linecap:round}
 .ex .how{justify-self:start;border:0;background:none;padding:0;font-weight:650;font-size:13px;color:var(--accent)}
 .g-est{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
@@ -826,41 +834,45 @@ const secTxt=n=>TIMED[n]+' s'+(PER_SIDE.has(n)?' / side':'');
 // what to print for an exercise's prescription; timed moves always read in seconds
 const topSec=n=>+String(TIMED[n]).split('–').pop();
 function doseOf(it,name,sep){name=name||it.e.name;sep=sep||' × ';if(isTimed(name))return `${it.sets}${sep}${/\ds\b|\d s\b/.test(String(it.reps))?it.reps:secTxt(name)}`;return it.pyr?it.pyr:`${it.sets}${sep}${it.reps}`;}
-// simple side-view stick figures: each pose is a head, limb polylines and props, drawn start → finish
-const ST='50,31 50,58|50,58 50,75 50,92|50,92 56,92';
-const BENCH=['bench',22,64,50,6];
+// mannequin-style figures: joints per pose, drawn as tapered limbs with the working muscles shaded in.
+// side view faces right; front-view poses set f:1 and give both arms and legs.
+const SD={hd:[50,20],sh:[50,31],hp:[50,58],kn:[51,75],an:[50,90],el:[50,44],wr:[51,56]};
+const FR={f:1,hd:[50,20],sh:[42,32],sh2:[58,32],hp:[45,58],hp2:[55,58],kn:[45,75],kn2:[55,75],an:[45,90],an2:[55,90],el:[39,44],wr:[39,56],el2:[61,44],wr2:[61,56]};
+const P_=(base,o)=>Object.assign({},base,o);
+const BENCHP=['bench',22,64,50,6],PULLBAR=['line',34,8,70,8];
+const HANG={hd:[50,25],sh:[50,34],hp:[50,61],kn:[52,75],an:[50,87],ft:[54,89],el:[52,21],wr:[52,8],p:[PULLBAR]};
 const MOVES={
-  squat:{s:{h:[52,21],l:ST+'|50,31 40,36 42,30',p:[['bar',42,30]]},e:{h:[48,37],l:'46,46 36,66|36,66 58,72 50,92|50,92 56,92|46,46 38,48 44,44',p:[['bar',44,44]]}},
-  lunge:{s:{h:[50,22],l:ST+'|50,31 50,44 50,56',p:[['db',50,58]]},e:{h:[50,32],l:'50,41 50,66|50,66 66,68 66,92|66,92 72,92|50,66 42,84 30,90|50,41 50,54 50,66',p:[['db',50,68]]}},
-  hinge:{s:{h:[50,22],l:ST+'|50,31 51,44 52,56',p:[['bar',52,57]]},e:{h:[73,40],l:'66,44 42,58|42,58 46,75 48,92|48,92 54,92|66,44 66,58 66,72',p:[['bar',66,73]]}},
-  swing:{s:{h:[73,40],l:'66,44 42,58|42,58 46,75 48,92|48,92 54,92|66,44 62,58 54,68',p:[['kb',54,70]]},e:{h:[50,22],l:ST+'|50,31 62,31 74,30',p:[['kb',77,30]]}},
-  thrust:{s:{h:[20,52],l:'28,58 48,74|48,74 66,66 68,92|68,92 74,92|28,58 40,64 48,70',p:[['bench',4,60,26,8],['bar',48,70]]},e:{h:[20,52],l:'28,58 48,56|48,56 66,56 68,92|68,92 74,92|28,58 40,56 48,52',p:[['bench',4,60,26,8],['bar',48,52]]}},
-  bench:{s:{h:[20,58],l:'30,60 60,60|60,60 72,72 74,92|30,60 30,46 30,32',p:[BENCH,['bar',30,31]]},e:{h:[20,58],l:'30,60 60,60|60,60 72,72 74,92|30,60 24,70 32,54',p:[BENCH,['bar',32,53]]}},
-  pushup:{s:{h:[22,61],l:'30,66 60,74|60,74 74,81 88,88|30,66 30,78 30,90'},e:{h:[22,77],l:'30,82 60,85|60,85 74,87 88,89|30,82 40,86 30,90'}},
-  dip:{s:{h:[50,25],l:'50,34 50,60|50,60 58,72 52,82|50,34 52,41 54,48',p:[['line',38,48,70,48]]},e:{h:[52,37],l:'50,46 48,70|48,70 56,82 50,90|50,46 40,44 54,48',p:[['line',38,48,70,48]]}},
-  press:{s:{h:[48,21],l:ST+'|50,31 61,38 60,29',p:[['bar',61,29]]},e:{h:[50,22],l:ST+'|50,31 51,18 51,6',p:[['bar',51,6]]}},
-  raise:{front:1,s:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 40,44 40,56|58,32 60,44 60,56',p:[['db',40,58],['db',60,58]]},e:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 30,33 18,33|58,32 70,33 82,33',p:[['db',16,33],['db',84,33]]}},
-  fly:{front:1,s:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 28,34 16,36|58,32 72,34 84,36',p:[['h',16,36],['h',84,36]]},e:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 38,42 47,46|58,32 62,42 53,46',p:[['h',47,46],['h',53,46]]}},
-  rear:{front:1,s:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 38,42 47,40|58,32 62,42 53,40',p:[['h',47,40],['h',53,40]]},e:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 30,28 20,24|58,32 70,28 80,24',p:[['h',20,24],['h',80,24]]}},
-  row:{s:{h:[71,31],l:'64,37 44,58|44,58 48,75 50,92|50,92 56,92|64,37 64,50 64,62',p:[['bar',64,63]]},e:{h:[71,31],l:'64,37 44,58|44,58 48,75 50,92|50,92 56,92|64,37 52,46 58,56',p:[['bar',58,57]]}},
-  pull:{s:{h:[50,26],l:'50,35 50,62|50,62 52,76 50,88|50,35 52,22 52,8',p:[['line',34,8,70,8]]},e:{h:[50,15],l:'50,24 50,51|50,51 52,65 50,77|50,24 61,26 52,8',p:[['line',34,8,70,8]]}},
-  pullover:{s:{h:[50,22],l:ST+'|50,31 62,20 72,10',p:[['cable',72,10,92,4]]},e:{h:[50,22],l:ST+'|50,31 56,44 59,56',p:[['cable',59,56,92,4]]}},
-  curl:{s:{h:[50,22],l:ST+'|50,31 50,44 51,56',p:[['db',51,58]]},e:{h:[50,22],l:ST+'|50,31 50,44 60,34',p:[['db',61,33]]}},
-  pushdown:{s:{h:[50,22],l:ST+'|50,31 50,44 60,38',p:[['cable',60,38,66,4]]},e:{h:[50,22],l:ST+'|50,31 50,44 53,57',p:[['cable',53,57,66,4]]}},
-  overhead:{s:{h:[50,22],l:ST+'|50,31 53,16 42,22',p:[['db',41,22]]},e:{h:[50,22],l:ST+'|50,31 53,16 53,4',p:[['db',53,3]]}},
-  skull:{s:{h:[20,58],l:'30,60 60,60|60,60 72,72 74,92|30,60 30,44 20,48',p:[BENCH,['bar',19,48]]},e:{h:[20,58],l:'30,60 60,60|60,60 72,72 74,92|30,60 30,44 30,30',p:[BENCH,['bar',30,29]]}},
-  calf:{s:{h:[50,20],l:'50,29 50,56|50,56 50,73 50,88|50,88 58,88|50,29 50,42 50,54',p:[['bench',54,88,14,5]]},e:{h:[50,14],l:'50,23 50,50|50,50 50,68 51,84|51,84 58,88|50,23 50,36 50,48',p:[['bench',54,88,14,5]]}},
-  legcurl:{s:{h:[18,72],l:'26,76 56,78|56,78 72,78 88,78|26,76 22,88',p:[['bench',16,82,74,6]]},e:{h:[18,72],l:'26,76 56,78|56,78 72,78 66,62|26,76 22,88',p:[['bench',16,82,74,6]]}},
-  legext:{s:{h:[42,30],l:'42,39 42,62|42,62 62,62 62,84|42,39 44,52 46,62',p:[['bench',34,64,32,6]]},e:{h:[42,30],l:'42,39 42,62|42,62 62,62 82,56|42,39 44,52 46,62',p:[['bench',34,64,32,6]]}},
-  abduct:{front:1,s:{h:[50,22],l:'50,31 50,58|50,58 47,75 47,92|50,58 53,75 53,92|42,32 58,32|42,32 40,44 40,56|58,32 60,44 60,56'},e:{h:[50,22],l:'50,31 50,58|50,58 47,75 47,92|50,58 64,73 74,88|42,32 58,32|42,32 40,44 40,56|58,32 60,44 60,56'}},
-  kickback:{s:{h:[50,22],l:ST+'|50,58 52,75 52,90|50,31 56,42 62,48'},e:{h:[52,24],l:'51,33 50,58|50,58 50,75 50,92|50,92 56,92|50,58 36,70 26,80|51,33 58,42 64,46'}},
-  crunch:{s:{h:[16,82],l:'24,85 54,86|54,86 66,72 80,90|24,85 18,76'},e:{h:[27,68],l:'33,74 54,86|54,86 66,72 80,90|33,74 30,64'}},
-  legraise:{s:{h:[50,26],l:'50,35 50,62|50,62 51,76 50,90|50,35 52,22 52,8',p:[['line',34,8,70,8]]},e:{h:[50,26],l:'50,35 50,62|50,62 66,58 80,56|50,35 52,22 52,8',p:[['line',34,8,70,8]]}},
-  rotate:{s:{h:[50,22],l:ST+'|50,31 58,40 54,44',p:[['cable',54,44,6,44]]},e:{h:[50,22],l:ST+'|50,31 63,36 76,36',p:[['cable',76,36,6,44]]}},
-  plank:{hold:1,s:{h:[22,67],l:'30,72 60,78|60,78 88,88|30,72 32,88 44,88'}},
-  carry:{hold:1,s:{h:[50,22],l:ST+'|50,31 50,44 50,56|50,92 44,92',p:[['db',50,60]]}},
-  hang:{hold:1,s:{h:[50,26],l:'50,35 50,62|50,62 52,76 50,88|50,35 52,22 52,8',p:[['line',34,8,70,8]]}},
-  hop:{s:{h:[50,22],l:ST+'|50,31 56,44 62,52'},e:{h:[50,16],l:'50,25 50,52|50,52 50,69 50,84|50,84 56,86|50,25 56,38 62,46',p:[['rope',62,46]]}}
+  squat:{s:P_(SD,{hd:[52,20],el:[41,36],wr:[43,30],p:[['bar',43,30]]}),e:{hd:[49,35],sh:[46,44],hp:[34,64],kn:[57,70],an:[50,90],el:[38,48],wr:[44,42],p:[['bar',44,42]]}},
+  lunge:{s:P_(SD,{p:[['db',51,59]]}),e:{hd:[50,30],sh:[50,40],hp:[50,64],kn:[66,67],an:[66,90],kn2:[42,82],an2:[30,88],ft2:[27,91],el:[50,53],wr:[50,64],p:[['db',50,67]]}},
+  hinge:{s:P_(SD,{el:[51,44],wr:[52,56],p:[['bar',52,58]]}),e:{hd:[74,38],sh:[66,44],hp:[42,58],kn:[46,75],an:[48,90],el:[66,58],wr:[66,71],p:[['bar',66,73]]}},
+  swing:{s:{hd:[74,38],sh:[66,44],hp:[42,58],kn:[46,75],an:[48,90],el:[62,57],wr:[55,67],p:[['kb',55,71]]},e:P_(SD,{el:[62,32],wr:[74,30],p:[['kb',78,31]]})},
+  thrust:{s:{hd:[19,52],sh:[28,57],hp:[48,73],kn:[66,64],an:[68,90],el:[38,64],wr:[48,69],p:[['bench',4,60,26,8],['bar',48,68]]},e:{hd:[19,52],sh:[28,57],hp:[48,55],kn:[66,55],an:[68,90],el:[38,57],wr:[48,51],p:[['bench',4,60,26,8],['bar',48,50]]}},
+  bench:{s:{hd:[20,57],sh:[30,59],hp:[60,59],kn:[72,70],an:[74,90],el:[30,46],wr:[30,33],p:[BENCHP,['bar',30,32]]},e:{hd:[20,57],sh:[30,59],hp:[60,59],kn:[72,70],an:[74,90],el:[23,69],wr:[32,53],p:[BENCHP,['bar',32,52]]}},
+  pushup:{s:{hd:[22,60],sh:[30,65],hp:[60,73],kn:[74,80],an:[87,86],ft:[90,91],el:[30,77],wr:[30,89]},e:{hd:[22,76],sh:[30,81],hp:[60,84],kn:[74,86],an:[87,88],ft:[90,91],el:[40,84],wr:[30,89]}},
+  dip:{s:{hd:[50,24],sh:[50,34],hp:[50,59],kn:[57,71],an:[51,81],ft:[56,84],el:[52,41],wr:[54,48],p:[['line',38,48,70,48]]},e:{hd:[52,36],sh:[50,46],hp:[48,69],kn:[56,81],an:[50,90],el:[39,43],wr:[54,48],p:[['line',38,48,70,48]]}},
+  press:{s:P_(SD,{hd:[48,20],el:[60,38],wr:[60,29],p:[['bar',60,29]]}),e:P_(SD,{el:[51,18],wr:[51,6],p:[['bar',51,6]]})},
+  raise:{s:P_(FR,{p:[['db',39,58],['db',61,58]]}),e:P_(FR,{el:[30,33],wr:[18,33],el2:[70,33],wr2:[82,33],p:[['db',16,33],['db',84,33]]})},
+  fly:{s:P_(FR,{el:[29,34],wr:[16,36],el2:[71,34],wr2:[84,36]}),e:P_(FR,{el:[38,42],wr:[47,46],el2:[62,42],wr2:[53,46]})},
+  rear:{s:P_(FR,{el:[38,42],wr:[47,40],el2:[62,42],wr2:[53,40]}),e:P_(FR,{el:[30,28],wr:[20,24],el2:[70,28],wr2:[80,24]})},
+  row:{s:{hd:[71,30],sh:[64,37],hp:[44,58],kn:[48,75],an:[50,90],el:[64,50],wr:[64,62],p:[['bar',64,63]]},e:{hd:[71,30],sh:[64,37],hp:[44,58],kn:[48,75],an:[50,90],el:[52,45],wr:[58,56],p:[['bar',58,57]]}},
+  pull:{s:HANG,e:{hd:[50,14],sh:[50,23],hp:[50,50],kn:[52,64],an:[50,76],ft:[54,78],el:[61,25],wr:[52,8],p:[PULLBAR]}},
+  pullover:{s:P_(SD,{el:[62,21],wr:[72,11],p:[['cable',72,11,92,4]]}),e:P_(SD,{el:[56,44],wr:[59,56],p:[['cable',59,56,92,4]]})},
+  curl:{s:P_(SD,{p:[['db',51,58]]}),e:P_(SD,{wr:[60,34],p:[['db',61,33]]})},
+  pushdown:{s:P_(SD,{wr:[60,38],p:[['cable',60,38,66,4]]}),e:P_(SD,{wr:[53,57],p:[['cable',53,57,66,4]]})},
+  overhead:{s:P_(SD,{hd:[47,20],el:[54,16],wr:[43,22],p:[['db',42,22]]}),e:P_(SD,{hd:[47,20],el:[54,16],wr:[54,4],p:[['db',54,3]]})},
+  skull:{s:{hd:[20,57],sh:[30,59],hp:[60,59],kn:[72,70],an:[74,90],el:[30,44],wr:[20,48],p:[BENCHP,['bar',19,48]]},e:{hd:[20,57],sh:[30,59],hp:[60,59],kn:[72,70],an:[74,90],el:[30,44],wr:[30,30],p:[BENCHP,['bar',30,29]]}},
+  calf:{s:{hd:[50,18],sh:[50,29],hp:[50,56],kn:[50,73],an:[49,86],ft:[57,87],el:[50,42],wr:[50,54],p:[['bench',53,88,15,5]]},e:{hd:[50,13],sh:[50,24],hp:[50,51],kn:[50,68],an:[51,82],ft:[58,87],el:[50,37],wr:[50,49],p:[['bench',53,88,15,5]]}},
+  legcurl:{s:{hd:[18,71],sh:[27,76],hp:[56,77],kn:[72,77],an:[88,77],ft:[91,72],el:[25,86],wr:[30,89],p:[['bench',16,83,74,6]]},e:{hd:[18,71],sh:[27,76],hp:[56,77],kn:[72,77],an:[67,61],ft:[72,58],el:[25,86],wr:[30,89],p:[['bench',16,83,74,6]]}},
+  legext:{s:{hd:[42,28],sh:[42,38],hp:[42,61],kn:[62,61],an:[62,83],ft:[69,85],el:[44,50],wr:[48,60],p:[['bench',32,65,34,6]]},e:{hd:[42,28],sh:[42,38],hp:[42,61],kn:[62,61],an:[82,55],ft:[86,49],el:[44,50],wr:[48,60],p:[['bench',32,65,34,6]]}},
+  abduct:{s:P_(FR,{kn:[47,75],an:[47,90],kn2:[53,75],an2:[53,90]}),e:P_(FR,{kn:[47,75],an:[47,90],kn2:[64,73],an2:[74,87]})},
+  kickback:{s:P_(SD,{el:[57,42],wr:[63,47]}),e:P_(SD,{hd:[52,22],sh:[51,33],kn:[38,71],an:[28,83],ft:[24,88],kn2:[51,75],an2:[50,90],el:[58,43],wr:[64,47]})},
+  crunch:{s:{hd:[16,81],sh:[25,84],hp:[54,85],kn:[66,71],an:[78,88],ft:[84,91],el:[18,74],wr:[13,78]},e:{hd:[26,67],sh:[33,74],hp:[54,85],kn:[66,71],an:[78,88],ft:[84,91],el:[29,62],wr:[22,65]}},
+  legraise:{s:HANG,e:P_(HANG,{kn:[65,60],an:[80,58],ft:[84,53]})},
+  rotate:{s:P_(SD,{el:[58,40],wr:[54,45],p:[['cable',54,45,6,45]]}),e:P_(SD,{el:[63,36],wr:[76,36],p:[['cable',76,36,6,45]]})},
+  plank:{hold:1,s:{hd:[22,66],sh:[30,71],hp:[60,77],kn:[74,82],an:[87,86],ft:[90,91],el:[32,87],wr:[44,88]}},
+  carry:{hold:1,s:P_(SD,{kn2:[46,75],an2:[42,90],p:[['db',51,60]]})},
+  hang:{hold:1,s:HANG},
+  hop:{s:P_(SD,{el:[56,44],wr:[62,52]}),e:{hd:[50,14],sh:[50,25],hp:[50,52],kn:[50,69],an:[50,83],ft:[56,86],el:[56,38],wr:[62,46],p:[['rope',62,46]]}}
 };
 const MOVE_RX=[
   [/Jump Rope/,'hop'],[/Dead Hang/,'hang'],[/Carry|Bottoms-Up|Shrug/,'carry'],[/Plank|Hollow|Superman|Bird Dog|Dead Bug|Rollout/,'plank'],
@@ -877,13 +889,41 @@ const MOVE_RX=[
   [/Straight-Arm|Pullover/,'pullover'],[/Pull-Up|Chin-Up|Pulldown/,'pull'],[/Row/,'row'],[/Curl/,'curl']
 ];
 const moveOf=n=>{for(const [rx,k] of MOVE_RX)if(rx.test(n))return k;return null;};
-function poseSVG(P,label){
-  const props=(P.p||[]).map(([t,a,b,c,d])=>t==='bar'?`<circle cx="${a}" cy="${b}" r="4.2" class="mv-k"/>`:t==='db'?`<rect x="${a-5}" y="${b-2.5}" width="10" height="5" rx="1.5" class="mv-k"/>`:t==='kb'?`<circle cx="${a}" cy="${b}" r="4" class="mv-k"/>`:t==='h'?`<circle cx="${a}" cy="${b}" r="2.6" class="mv-k"/>`:t==='bench'?`<rect x="${a}" y="${b}" width="${c}" height="${d}" rx="1.5" class="mv-b"/>`:t==='line'?`<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" class="mv-c" stroke-width="3"/>`:t==='cable'?`<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" class="mv-c" stroke-dasharray="3 2.5"/>`:t==='rope'?`<path d="M${a} ${b} Q50 102 38 46" class="mv-c" fill="none" stroke-dasharray="3 2.5"/>`:'').join('');
-  return `<figure><svg viewBox="0 0 100 100" role="img" aria-label="${label}"><line x1="6" y1="93" x2="94" y2="93" class="mv-f"/>${props}${P.l.split('|').map(s=>`<polyline points="${s}" class="mv-l"/>`).join('')}<circle cx="${P.h[0]}" cy="${P.h[1]}" r="6.2" class="mv-h"/></svg><figcaption>${label}</figcaption></figure>`;
+// body parts a group works, for shading: torso, delt cap, upper arm, forearm, thigh, shin
+const PART={chest:'tor',abs:'tor',obliques:'tor',upperback:'tor',lats:'tor',lowerback:'tor',traps:'tor',shoulders:'delt',biceps:'ua',triceps:'ua',forearms:'fa',quads:'th',hamstrings:'th',glutes:'th',adductors:'th',calves:'sh'};
+function poseSVG(P,label,hi){
+  const cls=k=>hi[k]===1?'mv-hi':hi[k]===2?'mv-hi2':'mv-bd';
+  const ln=(a,b,w,c)=>a&&b?`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke-width="${w}" class="${c}"/>`:'';
+  const ft=(an,f)=>f||(an?[an[0]+(P.f?0:7),an[1]+(P.f?1:1.5)]:null);
+  const pr=([t,a,b,c,d])=>t==='bar'?`<circle cx="${a}" cy="${b}" r="4.4" class="mv-k"/>`:t==='db'?`<rect x="${a-5.5}" y="${b-2.8}" width="11" height="5.6" rx="2" class="mv-k"/>`:t==='kb'?`<circle cx="${a}" cy="${b}" r="4.2" class="mv-k"/>`:t==='bench'?`<rect x="${a}" y="${b}" width="${c}" height="${d}" rx="1.5" class="mv-b"/>`:t==='line'?`<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" class="mv-c" stroke-width="3"/>`:t==='cable'?`<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" class="mv-c" stroke-dasharray="3 2.5"/>`:t==='rope'?`<path d="M${a} ${b} Q50 102 38 46" class="mv-c" fill="none" stroke-dasharray="3 2.5"/>`:'';
+  const under=(P.p||[]).filter(x=>x[0]==='bench').map(pr).join(''),over=(P.p||[]).filter(x=>x[0]!=='bench').map(pr).join('');
+  const leg=(hp,kn,an,f,far)=>ln(hp,kn,11.5,far?'mv-far':cls('th'))+ln(kn,an,8.5,far?'mv-far':cls('sh'))+ln(an,ft(an,f),5,far?'mv-far':'mv-bd');
+  const arm=(sh,el,wr,far)=>ln(sh,el,8,far?'mv-far':cls('ua'))+ln(el,wr,6.4,far?'mv-far':cls('fa'))+(wr?`<circle cx="${wr[0]}" cy="${wr[1]}" r="3.4" class="${far?'mv-far':'mv-bd'}"/>`:'');
+  const nk=[P.sh[0]+(P.hd[0]-P.sh[0])*.55,P.sh[1]+(P.hd[1]-P.sh[1])*.55];
+  let body='';
+  if(P.f){
+    const sh2=P.sh2,hp2=P.hp2;
+    body+=leg(P.hp,P.kn,P.an,null,0)+leg(hp2,P.kn2,P.an2,null,0);
+    body+=`<path d="M${P.sh[0]} ${P.sh[1]} L${sh2[0]} ${sh2[1]} L${hp2[0]+1} ${hp2[1]} L${P.hp[0]-1} ${P.hp[1]} Z" class="${cls('tor')}" stroke-width="7" stroke-linejoin="round"/>`;
+    body+=ln([50,P.sh[1]],[50,P.hd[1]+4],6,'mv-bd');
+    body+=arm(P.sh,P.el,P.wr,0)+arm(sh2,P.el2,P.wr2,0);
+    if(hi.delt)body+=`<circle cx="${P.sh[0]}" cy="${P.sh[1]}" r="5" class="${cls('delt')}"/><circle cx="${sh2[0]}" cy="${sh2[1]}" r="5" class="${cls('delt')}"/>`;
+  } else {
+    if(P.kn2)body+=leg(P.hp,P.kn2,P.an2,P.ft2,1);
+    body+=ln(nk,P.sh,6,'mv-bd')+ln(P.sh,P.hp,15,cls('tor'));
+    body+=leg(P.hp,P.kn,P.an,P.ft,0);
+    body+=arm(P.sh,P.el,P.wr,0);
+    if(hi.delt)body+=`<circle cx="${P.sh[0]}" cy="${P.sh[1]}" r="5.2" class="${cls('delt')}"/>`;
+  }
+  body+=`<ellipse cx="${P.hd[0]}" cy="${P.hd[1]}" rx="6.4" ry="7.2" class="mv-hd"/>`;
+  return `<figure><svg viewBox="0 0 100 100" role="img" aria-label="${label}"><line x1="6" y1="93" x2="94" y2="93" class="mv-f"/>${under}${body}${over}</svg><figcaption>${label}</figcaption></figure>`;
 }
 function moveHTML(name){
   const k=moveOf(name);if(!k)return '';const M=MOVES[k];
-  return `<div class="mv" aria-label="How to do ${esc(name)}">${M.hold?poseSVG(M.s,isTimed(name)?'Hold '+secTxt(name):'Hold'):poseSVG(M.s,'Start')+`<span class="mv-arr" aria-hidden="true">→</span>`+poseSVG(M.e,'Finish')}</div>`;
+  const e=findAny(name),hi={};
+  if(e){const m=musclesOf(e);m.sec.forEach(g=>{if(PART[g]&&!hi[PART[g]])hi[PART[g]]=2;});if(PART[m.main])hi[PART[m.main]]=1;}
+  const key=e?`<p class="mv-key"><i class="k1"></i>${GROUPS[e.g].n}${Object.values(hi).includes(2)?'<i class="k2"></i>Also working':''}</p>`:'';
+  return `<div class="mv-wrap"><div class="mv" aria-label="How to do ${esc(name)}">${M.hold?poseSVG(M.s,isTimed(name)?'Hold '+secTxt(name):'Hold',hi):poseSVG(M.s,'Start',hi)+`<span class="mv-arr" aria-hidden="true">→</span>`+poseSVG(M.e,'Finish',hi)}</div>${key}</div>`;
 }
 
 // ---------- body figure ----------

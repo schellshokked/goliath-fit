@@ -1,5 +1,5 @@
 // Goliath Strength Trainer offline support. Bump VERSION whenever index.html changes.
-const VERSION = 'goliath-v25';
+const VERSION = 'goliath-v26';
 const SHELL = ['./', './index.html', './config.js', './auth.js', './social.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
