@@ -117,3 +117,31 @@ grant select, insert, update on public.goliath_profiles to authenticated;
 grant select, insert, delete on public.goliath_friends to authenticated;
 grant update (status, addressee) on public.goliath_friends to authenticated;
 grant select, insert, delete on public.goliath_workouts to authenticated;
+
+
+-- =====================================================================
+-- Migration "goliath_program_shares": programs sent between accepted friends.
+-- The recipient adds a copy to their own builds; weights and history are never included.
+create table public.goliath_program_shares (
+  id          uuid primary key default gen_random_uuid(),
+  sender      uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  sender_name text not null default '',
+  recipient   uuid not null references auth.users(id) on delete cascade,
+  name        text not null check (char_length(name) between 1 and 80),
+  kind        text not null check (kind in ('day','week','program')),
+  note        text not null default '' check (char_length(note) <= 300),
+  program     jsonb not null check (octet_length(program::text) < 200000),
+  created_at  timestamptz not null default now()
+);
+create index goliath_program_shares_recipient_idx on public.goliath_program_shares (recipient, created_at desc);
+create index goliath_program_shares_sender_idx on public.goliath_program_shares (sender);
+alter table public.goliath_program_shares enable row level security;
+create policy "See programs you sent or received" on public.goliath_program_shares for select to authenticated
+  using (sender = (select auth.uid()) or recipient = (select auth.uid()));
+create policy "Send programs to friends" on public.goliath_program_shares for insert to authenticated
+  with check (sender = (select auth.uid()) and recipient <> (select auth.uid())
+              and private.goliath_are_friends((select auth.uid()), recipient));
+create policy "Either side can delete" on public.goliath_program_shares for delete to authenticated
+  using (sender = (select auth.uid()) or recipient = (select auth.uid()));
+revoke all on public.goliath_program_shares from anon;
+grant select, insert, delete on public.goliath_program_shares to authenticated;
