@@ -75,7 +75,7 @@
     else if (row){ lastPull = Date.parse(row.updated_at); hydrate(row.data); }
     else if (!owner && hasLocalData()){ offerMigrate = true; resetView(); }
     else if (owner === u.id && hasLocalData()){ pushNow(); }
-    else { clearLocal(); writeLocal(); resetView(); }
+    else { clearLocal(); writeLocal(); resetView(); localStorage.setItem(OWNER, u.id); pushNow(); }   // new account: create its row right away
     localStorage.setItem(OWNER, u.id);
     paintStatus();
   }
