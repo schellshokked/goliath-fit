@@ -306,6 +306,18 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .set.done{background:var(--green);border-color:var(--green);color:var(--surface)}
 .g-meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:12.5px;color:var(--muted)}
 .g-detail{font-size:13.5px;color:var(--muted);display:grid;gap:4px}
+.mv{display:flex;align-items:center;gap:4px;max-width:320px}
+.mv figure{margin:0;flex:1;display:grid;justify-items:center;gap:2px;background:var(--surface-2);border-radius:12px;padding:6px 4px 4px}
+.mv svg{width:100%;max-width:130px;height:auto;display:block}
+.mv figcaption{font:600 10.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mv-arr{color:var(--muted);font-weight:700;flex:none}
+.mv-l{fill:none;stroke:var(--ink);stroke-width:4.2;stroke-linecap:round;stroke-linejoin:round}
+.mv-h{fill:var(--ink)}
+.mv-k{fill:var(--accent)}
+.mv-c{stroke:var(--accent);stroke-width:1.6;stroke-linecap:round}
+.mv-b{fill:var(--muted);opacity:.45}
+.mv-f{stroke:var(--line);stroke-width:2;stroke-linecap:round}
+.ex .how{justify-self:start;border:0;background:none;padding:0;font-weight:650;font-size:13px;color:var(--accent)}
 .g-est{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .g-est .pill{display:inline-flex;align-items:baseline;gap:5px;border-radius:8px;padding:5px 9px;background:var(--surface-2);font-size:12.5px;color:var(--muted);white-space:nowrap}
 .g-est .pill b{font:700 14px var(--f-mono);color:var(--ink);font-variant-numeric:tabular-nums}
@@ -804,6 +816,75 @@ const EX = {};
 const PG_X=['Barbell Bench Press','Dumbbell Bench Press','Dumbbell Fly','EZ-Bar Skull Crusher','Close-Grip Bench Press','Weighted Dip','Pike Push-Up','Conventional Deadlift','Back Squat','Good Morning','Cable Crunch','Ab Crunch Machine','Reverse Crunch','Hanging Leg Raise','Ab Wheel Rollout','Hollow Body Hold','Russian Twist','Hanging Oblique Knee Raise','Dead Bug','Glute Bridge','Barbell Hip Thrust','Lying Leg Curl','Superman Hold','Reverse Hyperextension','Stability Ball Leg Curl','Nordic Curl','Sissy Squat','Jump Rope'];
 const PP_X=['Cable Crunch','Ab Crunch Machine','Reverse Crunch','Hanging Leg Raise','Ab Wheel Rollout','Hollow Body Hold','Russian Twist','Hanging Oblique Knee Raise','Conventional Deadlift','Nordic Curl','Weighted Dip','Sissy Squat','Jump Rope'];
 for (const g in RAW) EX[g] = RAW[g].map((s,i)=>{const [name,eq,lvl,fl,inj,cue]=s.split('|');const ij=inj?inj.split(','):[];if(PG_X.includes(name))ij.push('pg');if(PP_X.includes(name))ij.push('pp');return {name,eq,lvl:+lvl,c:fl.includes('c'),s:fl.includes('s'),inj:ij,cue,g,i};});
+
+// ---------- timed exercises and movement diagrams ----------
+// holds, carries and rope work are done for time, so they show seconds instead of reps
+const TIMED={'Plank':'30–60','Side Plank':'20–45','Hollow Body Hold':'20–40','Dead Hang':'20–45',"Farmer's Carry":'30–45','Suitcase Carry':'30–45','Kettlebell Suitcase Carry':'30–45','Kettlebell Bottoms-Up Hold':'20–30','Superman Hold':'20–30','Copenhagen Plank':'15–30','Jump Rope':'45–60'};
+const PER_SIDE=new Set(['Side Plank','Copenhagen Plank','Suitcase Carry','Kettlebell Suitcase Carry','Kettlebell Bottoms-Up Hold']);
+const isTimed=n=>!!TIMED[n];
+const secTxt=n=>TIMED[n]+' s'+(PER_SIDE.has(n)?' / side':'');
+// what to print for an exercise's prescription; timed moves always read in seconds
+const topSec=n=>+String(TIMED[n]).split('–').pop();
+function doseOf(it,name,sep){name=name||it.e.name;sep=sep||' × ';if(isTimed(name))return `${it.sets}${sep}${/\ds\b|\d s\b/.test(String(it.reps))?it.reps:secTxt(name)}`;return it.pyr?it.pyr:`${it.sets}${sep}${it.reps}`;}
+// simple side-view stick figures: each pose is a head, limb polylines and props, drawn start → finish
+const ST='50,31 50,58|50,58 50,75 50,92|50,92 56,92';
+const BENCH=['bench',22,64,50,6];
+const MOVES={
+  squat:{s:{h:[52,21],l:ST+'|50,31 40,36 42,30',p:[['bar',42,30]]},e:{h:[48,37],l:'46,46 36,66|36,66 58,72 50,92|50,92 56,92|46,46 38,48 44,44',p:[['bar',44,44]]}},
+  lunge:{s:{h:[50,22],l:ST+'|50,31 50,44 50,56',p:[['db',50,58]]},e:{h:[50,32],l:'50,41 50,66|50,66 66,68 66,92|66,92 72,92|50,66 42,84 30,90|50,41 50,54 50,66',p:[['db',50,68]]}},
+  hinge:{s:{h:[50,22],l:ST+'|50,31 51,44 52,56',p:[['bar',52,57]]},e:{h:[73,40],l:'66,44 42,58|42,58 46,75 48,92|48,92 54,92|66,44 66,58 66,72',p:[['bar',66,73]]}},
+  swing:{s:{h:[73,40],l:'66,44 42,58|42,58 46,75 48,92|48,92 54,92|66,44 62,58 54,68',p:[['kb',54,70]]},e:{h:[50,22],l:ST+'|50,31 62,31 74,30',p:[['kb',77,30]]}},
+  thrust:{s:{h:[20,52],l:'28,58 48,74|48,74 66,66 68,92|68,92 74,92|28,58 40,64 48,70',p:[['bench',4,60,26,8],['bar',48,70]]},e:{h:[20,52],l:'28,58 48,56|48,56 66,56 68,92|68,92 74,92|28,58 40,56 48,52',p:[['bench',4,60,26,8],['bar',48,52]]}},
+  bench:{s:{h:[20,58],l:'30,60 60,60|60,60 72,72 74,92|30,60 30,46 30,32',p:[BENCH,['bar',30,31]]},e:{h:[20,58],l:'30,60 60,60|60,60 72,72 74,92|30,60 24,70 32,54',p:[BENCH,['bar',32,53]]}},
+  pushup:{s:{h:[22,61],l:'30,66 60,74|60,74 74,81 88,88|30,66 30,78 30,90'},e:{h:[22,77],l:'30,82 60,85|60,85 74,87 88,89|30,82 40,86 30,90'}},
+  dip:{s:{h:[50,25],l:'50,34 50,60|50,60 58,72 52,82|50,34 52,41 54,48',p:[['line',38,48,70,48]]},e:{h:[52,37],l:'50,46 48,70|48,70 56,82 50,90|50,46 40,44 54,48',p:[['line',38,48,70,48]]}},
+  press:{s:{h:[48,21],l:ST+'|50,31 61,38 60,29',p:[['bar',61,29]]},e:{h:[50,22],l:ST+'|50,31 51,18 51,6',p:[['bar',51,6]]}},
+  raise:{front:1,s:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 40,44 40,56|58,32 60,44 60,56',p:[['db',40,58],['db',60,58]]},e:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 30,33 18,33|58,32 70,33 82,33',p:[['db',16,33],['db',84,33]]}},
+  fly:{front:1,s:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 28,34 16,36|58,32 72,34 84,36',p:[['h',16,36],['h',84,36]]},e:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 38,42 47,46|58,32 62,42 53,46',p:[['h',47,46],['h',53,46]]}},
+  rear:{front:1,s:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 38,42 47,40|58,32 62,42 53,40',p:[['h',47,40],['h',53,40]]},e:{h:[50,22],l:'50,31 50,58|50,58 44,75 44,92|50,58 56,75 56,92|42,32 58,32|42,32 30,28 20,24|58,32 70,28 80,24',p:[['h',20,24],['h',80,24]]}},
+  row:{s:{h:[71,31],l:'64,37 44,58|44,58 48,75 50,92|50,92 56,92|64,37 64,50 64,62',p:[['bar',64,63]]},e:{h:[71,31],l:'64,37 44,58|44,58 48,75 50,92|50,92 56,92|64,37 52,46 58,56',p:[['bar',58,57]]}},
+  pull:{s:{h:[50,26],l:'50,35 50,62|50,62 52,76 50,88|50,35 52,22 52,8',p:[['line',34,8,70,8]]},e:{h:[50,15],l:'50,24 50,51|50,51 52,65 50,77|50,24 61,26 52,8',p:[['line',34,8,70,8]]}},
+  pullover:{s:{h:[50,22],l:ST+'|50,31 62,20 72,10',p:[['cable',72,10,92,4]]},e:{h:[50,22],l:ST+'|50,31 56,44 59,56',p:[['cable',59,56,92,4]]}},
+  curl:{s:{h:[50,22],l:ST+'|50,31 50,44 51,56',p:[['db',51,58]]},e:{h:[50,22],l:ST+'|50,31 50,44 60,34',p:[['db',61,33]]}},
+  pushdown:{s:{h:[50,22],l:ST+'|50,31 50,44 60,38',p:[['cable',60,38,66,4]]},e:{h:[50,22],l:ST+'|50,31 50,44 53,57',p:[['cable',53,57,66,4]]}},
+  overhead:{s:{h:[50,22],l:ST+'|50,31 53,16 42,22',p:[['db',41,22]]},e:{h:[50,22],l:ST+'|50,31 53,16 53,4',p:[['db',53,3]]}},
+  skull:{s:{h:[20,58],l:'30,60 60,60|60,60 72,72 74,92|30,60 30,44 20,48',p:[BENCH,['bar',19,48]]},e:{h:[20,58],l:'30,60 60,60|60,60 72,72 74,92|30,60 30,44 30,30',p:[BENCH,['bar',30,29]]}},
+  calf:{s:{h:[50,20],l:'50,29 50,56|50,56 50,73 50,88|50,88 58,88|50,29 50,42 50,54',p:[['bench',54,88,14,5]]},e:{h:[50,14],l:'50,23 50,50|50,50 50,68 51,84|51,84 58,88|50,23 50,36 50,48',p:[['bench',54,88,14,5]]}},
+  legcurl:{s:{h:[18,72],l:'26,76 56,78|56,78 72,78 88,78|26,76 22,88',p:[['bench',16,82,74,6]]},e:{h:[18,72],l:'26,76 56,78|56,78 72,78 66,62|26,76 22,88',p:[['bench',16,82,74,6]]}},
+  legext:{s:{h:[42,30],l:'42,39 42,62|42,62 62,62 62,84|42,39 44,52 46,62',p:[['bench',34,64,32,6]]},e:{h:[42,30],l:'42,39 42,62|42,62 62,62 82,56|42,39 44,52 46,62',p:[['bench',34,64,32,6]]}},
+  abduct:{front:1,s:{h:[50,22],l:'50,31 50,58|50,58 47,75 47,92|50,58 53,75 53,92|42,32 58,32|42,32 40,44 40,56|58,32 60,44 60,56'},e:{h:[50,22],l:'50,31 50,58|50,58 47,75 47,92|50,58 64,73 74,88|42,32 58,32|42,32 40,44 40,56|58,32 60,44 60,56'}},
+  kickback:{s:{h:[50,22],l:ST+'|50,58 52,75 52,90|50,31 56,42 62,48'},e:{h:[52,24],l:'51,33 50,58|50,58 50,75 50,92|50,92 56,92|50,58 36,70 26,80|51,33 58,42 64,46'}},
+  crunch:{s:{h:[16,82],l:'24,85 54,86|54,86 66,72 80,90|24,85 18,76'},e:{h:[27,68],l:'33,74 54,86|54,86 66,72 80,90|33,74 30,64'}},
+  legraise:{s:{h:[50,26],l:'50,35 50,62|50,62 51,76 50,90|50,35 52,22 52,8',p:[['line',34,8,70,8]]},e:{h:[50,26],l:'50,35 50,62|50,62 66,58 80,56|50,35 52,22 52,8',p:[['line',34,8,70,8]]}},
+  rotate:{s:{h:[50,22],l:ST+'|50,31 58,40 54,44',p:[['cable',54,44,6,44]]},e:{h:[50,22],l:ST+'|50,31 63,36 76,36',p:[['cable',76,36,6,44]]}},
+  plank:{hold:1,s:{h:[22,67],l:'30,72 60,78|60,78 88,88|30,72 32,88 44,88'}},
+  carry:{hold:1,s:{h:[50,22],l:ST+'|50,31 50,44 50,56|50,92 44,92',p:[['db',50,60]]}},
+  hang:{hold:1,s:{h:[50,26],l:'50,35 50,62|50,62 52,76 50,88|50,35 52,22 52,8',p:[['line',34,8,70,8]]}},
+  hop:{s:{h:[50,22],l:ST+'|50,31 56,44 62,52'},e:{h:[50,16],l:'50,25 50,52|50,52 50,69 50,84|50,84 56,86|50,25 56,38 62,46',p:[['rope',62,46]]}}
+};
+const MOVE_RX=[
+  [/Jump Rope/,'hop'],[/Dead Hang/,'hang'],[/Carry|Bottoms-Up|Shrug/,'carry'],[/Plank|Hollow|Superman|Bird Dog|Dead Bug|Rollout/,'plank'],
+  [/Leg Raise|Knee Raise/,'legraise'],[/Crunch|Twist/,'crunch'],[/Pallof|Woodchop/,'rotate'],
+  [/Calf|Tibialis/,'calf'],[/Leg Curl|Nordic/,'legcurl'],[/Leg Extension/,'legext'],
+  [/Adduct|Abduct|Lateral Walk|Side-Lying/,'abduct'],[/Kickback/,'kickback'],
+  [/Swing|High Pull/,'swing'],[/Hip Thrust|Glute Bridge/,'thrust'],
+  [/Lunge|Split Squat|Step-Up|Cossack/,'lunge'],[/Squat|Leg Press|Hack/,'squat'],
+  [/Deadlift|Good Morning|Rack Pull|Pull-Through|Back Extension|Hyperextension/,'hinge'],
+  [/Skull/,'skull'],[/Pushdown/,'pushdown'],[/Overhead.*Extension|Overhead Extension/,'overhead'],
+  [/Push-Up/,'pushup'],[/Dip/,'dip'],[/Overhead.*Press|Shoulder Press|Arnold|Push Press|Seated Dumbbell Press/,'press'],
+  [/Bench Press|Chest Press|Incline.*Press/,'bench'],[/Lateral Raise|Y-Raise/,'raise'],
+  [/Rear Delt|Reverse Pec|Face Pull|Pull-Apart/,'rear'],[/Fly|Pec Deck/,'fly'],
+  [/Straight-Arm|Pullover/,'pullover'],[/Pull-Up|Chin-Up|Pulldown/,'pull'],[/Row/,'row'],[/Curl/,'curl']
+];
+const moveOf=n=>{for(const [rx,k] of MOVE_RX)if(rx.test(n))return k;return null;};
+function poseSVG(P,label){
+  const props=(P.p||[]).map(([t,a,b,c,d])=>t==='bar'?`<circle cx="${a}" cy="${b}" r="4.2" class="mv-k"/>`:t==='db'?`<rect x="${a-5}" y="${b-2.5}" width="10" height="5" rx="1.5" class="mv-k"/>`:t==='kb'?`<circle cx="${a}" cy="${b}" r="4" class="mv-k"/>`:t==='h'?`<circle cx="${a}" cy="${b}" r="2.6" class="mv-k"/>`:t==='bench'?`<rect x="${a}" y="${b}" width="${c}" height="${d}" rx="1.5" class="mv-b"/>`:t==='line'?`<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" class="mv-c" stroke-width="3"/>`:t==='cable'?`<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" class="mv-c" stroke-dasharray="3 2.5"/>`:t==='rope'?`<path d="M${a} ${b} Q50 102 38 46" class="mv-c" fill="none" stroke-dasharray="3 2.5"/>`:'').join('');
+  return `<figure><svg viewBox="0 0 100 100" role="img" aria-label="${label}"><line x1="6" y1="93" x2="94" y2="93" class="mv-f"/>${props}${P.l.split('|').map(s=>`<polyline points="${s}" class="mv-l"/>`).join('')}<circle cx="${P.h[0]}" cy="${P.h[1]}" r="6.2" class="mv-h"/></svg><figcaption>${label}</figcaption></figure>`;
+}
+function moveHTML(name){
+  const k=moveOf(name);if(!k)return '';const M=MOVES[k];
+  return `<div class="mv" aria-label="How to do ${esc(name)}">${M.hold?poseSVG(M.s,isTimed(name)?'Hold '+secTxt(name):'Hold'):poseSVG(M.s,'Start')+`<span class="mv-arr" aria-hidden="true">→</span>`+poseSVG(M.e,'Finish')}</div>`;
+}
 
 // ---------- body figure ----------
 const m=(id,inner)=>`<g class="m" data-m="${id}" tabindex="0" role="button" aria-label="${GROUPS[id].n}"><title>${GROUPS[id].n}</title>${inner}</g>`;
@@ -1401,6 +1482,7 @@ function renderList(){
     <div class="ex-top"><div class="ex-name">${e.name}</div><div class="lvl" title="${LVL[e.lvl]}" aria-label="${LVL[e.lvl]}"><span class="f"></span><span class="${e.lvl>=2?'f':''}"></span><span class="${e.lvl>=3?'f':''}"></span></div></div>
     <div class="tags"><span class="tag">${EQ[e.eq]}</span><span class="tag">${LVL[e.lvl]}</span>${e.c?'<span class="tag cmp">Compound</span>':''}${e.s?'<span class="tag spot">Spotter advised</span>':''}${pn.has(e.name+'|'+e.g)?'<span class="tag plan">In your program</span>':''}${(A.swaps||[]).some(x=>x.from===e.name)?'<span class="tag">Swapped out</span>':''}</div>
     <div class="cue">${e.cue}</div>
+    ${moveOf(e.name)?`<button class="how" data-how="${esc(e.name)}" aria-expanded="${S.how===e.name}">${S.how===e.name?'Hide diagram':'Show how ›'}</button>${S.how===e.name?moveHTML(e.name):''}`:''}
     <div class="bm-add"><button class="chip sm" data-bmadd="${esc(e.name)}" aria-expanded="${S.bmAdd===e.name}">+ Add to a build</button>${S.bmAdd===e.name?`<span class="bm-days">${addTargets().map(x=>`<button class="chip sm ink" data-bmto="${x.key}">${esc(x.label)}</button>`).join('')}<button class="chip sm ink" data-bmto="new">+ New single workout</button></span>`:''}</div></div>`).join(''):'<div class="empty">No exercises for this equipment.</div>';
   const on=(A.priority||[]).includes(S.sel);
   $('#prioBtn').classList.toggle('on',on);
@@ -1641,7 +1723,7 @@ function itemHTML(it,label,then,key){
   }
   return `<div class="it">
     <div class="nm">${label?`<em>${label}</em>`:''}${it.e.name}</div>
-    <div class="dose"><b>${it.pyr?it.pyr:`${it.sets} × ${it.reps}`}</b><small>${then?then:'rest '+fmtRest(it.rest)}</small></div>
+    <div class="dose"><b>${doseOf(it)}</b><small>${then?then:'rest '+fmtRest(it.rest)}</small></div>
     <div class="gq">${GROUPS[it.e.g].n} · ${EQ[it.e.eq]}${it.main?' · main lift':''}</div>
     ${it.showCue?`<div class="cueline">${it.e.cue}</div>`:''}
     ${it.notes.length?`<div class="notes">${it.notes.map(n=>`<div class="note ${n.k}"><b>${n.t}.</b> ${n.d}</div>`).join('')}</div>`:''}
@@ -1794,7 +1876,7 @@ function midReps(it){const n=(String(it.pyr||it.reps).match(/\d+/g)||[10]).map(N
 const cvU=(v,u)=>!u||u===GP.unit?v:(u==='kg'?v/0.453592:v*0.453592);
 // next-session weight (and reps, when the available weight is capped) from the logged strength estimate
 function targetFor(name,it){
-  const s=STR.ex&&STR.ex[name];if(!GP||!s||!(s.e1>0))return null;
+  const s=STR.ex&&STR.ex[name];if(!GP||!s||!(s.e1>0)||isTimed(name))return null;
   const inc=GP.unit==='lb'?5:2.5;const e1=cvU(s.e1,s.u);const top=topReps(it);
   // aim at the middle of the rep range with ~2 reps in reserve: beating it moves the weight up next time
   let w=Math.max(inc,Math.round(e1/(1+(midReps(it)+2)/30)/inc)*inc),r=null;
@@ -1810,6 +1892,7 @@ const repsAt=(e1,w)=>30*(e1/w-1);                       // most reps you could d
 const rnd=(v,u)=>{const inc=u==='kg'?2.5:5;return Math.round(v/inc)*inc;};
 // best strength estimate from before today: the review history (which already reads your rating), else the last session's logged set
 function baseE1(name){
+  if(isTimed(name))return null;
   const s=STR.ex&&STR.ex[name];if(s&&s.e1>0)return {v:cvU(s.e1,s.u),src:'review'};
   const L=LOG[name];if(!L)return null;
   if(L.r>0&&L.rat&&new Date(L.rat).toDateString()!==today()){const w=new Date(L.at).toDateString()===today()?L.pw:L.w;if(w>0)return {v:est1RM(w,L.r+2),src:'last'};}   // logged sets are assumed to stop ~2 reps short, as the plan asks
@@ -1823,6 +1906,13 @@ function musclesOf(e){
 function estHTML(ex,w,r){
   const u=GP.unit,base=baseE1(ex.name),now=est1RM(w,r),m=musclesOf(ex);
   const out=[];
+  if(isTimed(ex.name)){
+    const L=LOG[ex.name];
+    out.push(`<span class="pill" title="Timed exercise">Hold <b>${secTxt(ex.name)}</b></span>`);
+    if(r>0)out.push(`<span class="pill ${+r>=topSec(ex.name)?'hi':'ok'}">${+r>=topSec(ex.name)?'Top of range: go longer or heavier':'In range'}</span>`);
+    out.push(`<span class="pill mus"><b>${GROUPS[m.main].n}</b>${m.sec.length?' + '+m.sec.map(g=>GROUPS[g].n).join(', '):''}</span>`);
+    return out.join('');
+  }
   // a set short of failure only proves a lower bound, so the higher of this set and your history is the better guess
   if(now&&(!base||now>base.v))out.push(`<span class="pill" title="Estimated one-rep max from this set">1RM <b>~${rnd(now,u)}</b>${r>12?' rough':''}</span>`);
   else if(base)out.push(`<span class="pill" title="Estimated one-rep max from your logged sets">1RM <b>~${rnd(base.v,u)}</b></span>`);
@@ -1926,7 +2016,7 @@ function renderReview(){
     <div class="panel"><h3>What you lifted</h3>
       <p style="margin:-4px 0 8px;font-size:13px;color:var(--muted)">Check these against what you did. Use your best working set: the weight and the reps you got with it.</p>
       <div class="fb-head"><span>Exercise</span><span>${u}</span><span>Reps</span><span>Note</span></div>
-      ${R.rows.map((r,i)=>`<div class="fb-row ${r.use?'':'off'}"><div class="nm">${esc(r.n)}<small>Plan ${r.it.pyr?r.it.pyr:r.sets+'×'+r.it.reps}${r.ph?' · per hand':''} · ${r.done}/${r.sets} sets${r.use?'':' · not counted'}</small></div><input data-fbw="${i}" type="number" inputmode="decimal" value="${esc(r.w)}" placeholder="–" aria-label="Weight for ${esc(r.n)}"><input data-fbr="${i}" type="number" inputmode="numeric" value="${esc(r.r)}" placeholder="${topReps(r.it)}" aria-label="Reps for ${esc(r.n)}"><button class="fb-cbtn ${r.co?'on':r.c?'has':''}" data-fbc="${i}" aria-expanded="${r.co}" aria-label="${r.c?'Edit':'Add'} a comment on ${esc(r.n)}">${CMT_ICON}</button>${r.co||r.c?`<div class="fb-cwrap"${r.co?'':' hidden'}><textarea id="fbc-${i}" data-fbcn="${i}" placeholder="e.g. Elbow felt it on the last set, or the 50s were taken so I used 45s" aria-label="Comment on ${esc(r.n)}">${esc(r.c)}</textarea><p class="read" id="fbcr-${i}">${readRow(r.c,r)}</p></div>${r.co?'':`<div class="fb-cwrap"><p class="read" style="font-style:italic">“${esc(r.c)}”</p></div>`}`:''}</div>`).join('')}
+      ${R.rows.map((r,i)=>`<div class="fb-row ${r.use?'':'off'}"><div class="nm">${esc(r.n)}<small>Plan ${isTimed(r.n)?r.sets+'×'+secTxt(r.n):r.it.pyr?r.it.pyr:r.sets+'×'+r.it.reps}${r.ph?' · per hand':''} · ${r.done}/${r.sets} sets${r.use?'':' · not counted'}</small></div><input data-fbw="${i}" type="number" inputmode="decimal" value="${esc(r.w)}" placeholder="–" aria-label="Weight for ${esc(r.n)}"><input data-fbr="${i}" type="number" inputmode="numeric" value="${esc(r.r)}" placeholder="${isTimed(r.n)?topSec(r.n):topReps(r.it)}" aria-label="${isTimed(r.n)?'Seconds':'Reps'} for ${esc(r.n)}"><button class="fb-cbtn ${r.co?'on':r.c?'has':''}" data-fbc="${i}" aria-expanded="${r.co}" aria-label="${r.c?'Edit':'Add'} a comment on ${esc(r.n)}">${CMT_ICON}</button>${r.co||r.c?`<div class="fb-cwrap"${r.co?'':' hidden'}><textarea id="fbc-${i}" data-fbcn="${i}" placeholder="e.g. Elbow felt it on the last set, or the 50s were taken so I used 45s" aria-label="Comment on ${esc(r.n)}">${esc(r.c)}</textarea><p class="read" id="fbcr-${i}">${readRow(r.c,r)}</p></div>${r.co?'':`<div class="fb-cwrap"><p class="read" style="font-style:italic">“${esc(r.c)}”</p></div>`}`:''}</div>`).join('')}
     </div>
     <div class="panel"><div class="field"><label for="fbNote">Comments on the whole workout (optional)</label><textarea id="fbNote" placeholder="e.g. Slept badly and felt slow all session.">${esc(R.comment)}</textarea></div>
       <p class="read" id="fbRead" style="margin:8px 0 0">${readFeedback(R.comment,R.rows)}</p>
@@ -1943,7 +2033,7 @@ function submitReview(){
     const w=parseFloat(r.w),reps=parseInt(r.r||'',10)||(r.use?topReps(r.it):0);const f=per[i];
     if(r.w!==''&&w>=0)LOG[r.n]=Object.assign({},LOG[r.n]||{},{w,at:LOG[r.n]&&LOG[r.n].at||now},r.r?{r:reps,rat:now}:{});
     if(r.c&&r.c.trim()){LOG[r.n]=Object.assign({},LOG[r.n]||{},{note:r.c.trim().slice(0,300),noteAt:now});}
-    if(!r.use||!(w>0)||!reps)return;
+    if(!r.use||!(w>0)||!reps||isTimed(r.n))return;
     const prevT=targetFor(r.n,r.it);const priorW=prevT?prevT.w:(r.pw!=null?+r.pw:(r.it.sw&&r.n===r.it.e.name?r.it.sw.w:null));
     let rir=RIR[rating];
     if(f.has('easy'))rir+=1;
@@ -2028,19 +2118,19 @@ function renderGym(){
       </div>`;
     }
     return `<div class="g-item ${nDone===it.sets?'done':''}">
-      <div class="g-top"><button class="g-name" data-gopen="${esc(k)}" aria-expanded="${open}">${label?`<em>${label}</em>`:''}${ex.name}</button><span class="g-dose">${it.pyr?it.pyr:`${it.sets}×${it.reps}`}</span></div>
+      <div class="g-top"><button class="g-name" data-gopen="${esc(k)}" aria-expanded="${open}">${label?`<em>${label}</em>`:''}${ex.name}</button><span class="g-dose">${doseOf(it,ex.name,'×')}</span></div>
       ${last&&last.note?`<div class="g-note"><b>Your note${last.noteAt?' from '+new Date(last.noteAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):''}:</b> “${esc(last.note)}”</div>`:''}
       ${isSub?`<div class="g-sub"><span>Stand-in for <b>${it.e.name}</b> today</span><button class="chip sm" data-gkeep="${esc(k)}">Keep for future workouts</button></div>`:''}
       <div class="g-row">
         <div class="g-w"><input id="w-${di}-${slug(ex.name)}" data-wname="${esc(ex.name)}" type="number" inputmode="decimal" placeholder="${ph||'wt'}" value="${last?esc(last.w):''}" aria-label="Weight for ${esc(ex.name)}"><span>${u}${!isSub&&it.sw&&it.sw.ph?' / hand':''}</span></div>
-        <div class="g-w r"><input data-rname="${esc(ex.name)}" type="number" inputmode="numeric" placeholder="${tg&&tg.r?tg.r:topReps(it)}" value="${lastToday&&last.r?esc(last.r):''}" aria-label="Reps for ${esc(ex.name)}"><span>reps</span></div>
+        <div class="g-w r"><input data-rname="${esc(ex.name)}" type="number" inputmode="numeric" placeholder="${isTimed(ex.name)?topSec(ex.name):tg&&tg.r?tg.r:topReps(it)}" value="${lastToday&&last.r?esc(last.r):''}" aria-label="${isTimed(ex.name)?'Seconds':'Reps'} for ${esc(ex.name)}"><span>${isTimed(ex.name)?'sec':'reps'}</span></div>
         <div class="sets">${[...Array(it.sets).keys()].map(i=>`<button class="set ${CHECKS.has(k+'|'+i)?'done':''}" data-set="${esc(k)}|${i}" data-rest="${isLastInBlock?it.rest:0}" aria-label="Set ${i+1}">${i+1}</button>`).join('')}</div>
       </div>
       <div class="g-est" data-est="${slug(ex.name)}">${estHTML(ex,last?last.w:'',lastToday&&last.r?last.r:'')}</div>
-      <div class="g-meta"><span>${isLastInBlock?'Rest '+fmtRest(it.rest):'Go straight to the next exercise'}</span>${last&&last.w!=null?`<span>· last time ${esc(last.w)} ${u}${last.r?' × '+esc(last.r):''}</span>`:''}${tg?`<span>· target ~${tg.w} ${u}${tg.r?' × '+tg.r:''}</span>`:(!last&&ph?`<span>· start ~${ph} ${u}</span>`:'')}${tg&&tg.flag==='pain'?'<span class="tag warn">Pain last time · hold weight</span>':''}${tg&&tg.r?'<span class="tag warn">Weight capped · more reps</span>':''}${flags.map(x=>`<span class="tag ${x.k==='s'?'spot':x.k==='t'?'':'plan'}">${x.t.replace(/^Don't let your (.+) take over$/,"Watch the $1")}</span>`).join('')}</div>
+      <div class="g-meta"><span>${isLastInBlock?'Rest '+fmtRest(it.rest):'Go straight to the next exercise'}</span>${isTimed(ex.name)?(last&&last.r?`<span>· last time ${last.w?esc(last.w)+' '+u+', ':''}${esc(last.r)} s</span>`:''):last&&last.w!=null?`<span>· last time ${esc(last.w)} ${u}${last.r?' × '+esc(last.r):''}</span>`:''}${tg?`<span>· target ~${tg.w} ${u}${tg.r?' × '+tg.r:''}</span>`:(!last&&ph?`<span>· start ~${ph} ${u}</span>`:'')}${tg&&tg.flag==='pain'?'<span class="tag warn">Pain last time · hold weight</span>':''}${tg&&tg.r?'<span class="tag warn">Weight capped · more reps</span>':''}${flags.map(x=>`<span class="tag ${x.k==='s'?'spot':x.k==='t'?'':'plan'}">${x.t.replace(/^Don't let your (.+) take over$/,"Watch the $1")}</span>`).join('')}</div>
       <button class="g-alt-btn ${altOpen?'on':''}" data-galt="${esc(k)}" aria-expanded="${altOpen}"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6.2"/><path d="M3.6 12.4l8.8-8.8"/></svg>${altOpen?'Close':EQ_TAKEN[ex.eq]}</button>
       ${altPanel}
-      ${open?`<div class="g-detail">${musFig(ex)}<span>${ex.cue}</span>${isSub?'':it.notes.map(x=>`<span><b style="color:var(--ink)">${x.t}.</b> ${x.d}</span>`).join('')}</div>`:''}
+      ${open?`<div class="g-detail">${moveHTML(ex.name)}${musFig(ex)}<span>${ex.cue}</span>${isSub?'':it.notes.map(x=>`<span><b style="color:var(--ink)">${x.t}.</b> ${x.d}</span>`).join('')}</div>`:''}
     </div>`;
   };
   const blocks=d.blocks.map((b,bi)=>{
@@ -2166,6 +2256,7 @@ function styleTpl(items,type,mins){
     if(type==='giant'){x.ss=i%3!==2;x.rest=c?90:60;if(!c)x.reps='12–15';}
     if(type==='drop'&&!c){x.tech='drop';x.reps='10–12';}
     if(type==='pyramid'&&c){x.reps=short?'10/8/6':'12/10/8/6';x.sets=x.reps.split('/').length;x.rest=short?90:120;}
+    if(isTimed(x.n)){x.reps=TIMED[x.n]+' s';delete x.tech;}
   });
   if(items.length&&items[items.length-1].ss)delete items[items.length-1].ss;
   return items;
@@ -2200,11 +2291,11 @@ const PHP={
 const restFor=(c,reps)=>{const lo=parseInt(reps,10)||10;return c?(lo<=5?180:lo<=8?150:lo<=12?90:60):(lo<=8?90:lo<=12?60:45);};
 function applyPattern(b,key,fromPh){
   const P=PHP[key],base=b.phases[fromPh]||b.phases[0];
-  b.phases=P[2].map(([name,weeks,cr,ir,cs])=>({id:uid('p'),name,weeks,days:base.days.map(d=>({id:uid('d'),name:d.name,items:d.items.map(x=>{const e=findEx(x.g,x.n),c=!!(e&&e.c);const y=Object.assign({},x,{reps:c?cr:ir,sets:c?cs:3,rest:restFor(c,c?cr:ir)});delete y.tech;return y;})}))}));
+  b.phases=P[2].map(([name,weeks,cr,ir,cs])=>({id:uid('p'),name,weeks,days:base.days.map(d=>({id:uid('d'),name:d.name,items:d.items.map(x=>{const e=findEx(x.g,x.n),c=!!(e&&e.c);const y=Object.assign({},x,{reps:isTimed(x.n)?TIMED[x.n]+' s':c?cr:ir,sets:c?cs:3,rest:isTimed(x.n)?60:restFor(c,c?cr:ir)});delete y.tech;return y;})}))}));
   b.pattern=key;
 }
 const fits=(e,C)=>C.equip.has(e.eq)&&e.lvl<=C.maxLvl&&!e.inj.some(i=>C.inj.has(i))&&!C.avoid.has(e.name);
-const newItem=e=>({n:e.name,g:e.g,sets:3,reps:e.c?'6–10':'10–15',rest:e.c?120:60});
+const newItem=e=>({n:e.name,g:e.g,sets:3,reps:isTimed(e.name)?TIMED[e.name]+' s':e.c?'6–10':'10–15',rest:e.c?120:60});
 function autoPick(g,kind,used){
   const C=customCtx();const L=(EX[g]||[]).filter(e=>fits(e,C)&&!used.has(e.name));if(!L.length)return null;
   return L.sort((a,b)=>((kind==='c'?(a.c?0:3):(a.c?2:0))+a.lvl*.4+a.i*.05)-((kind==='c'?(b.c?0:3):(b.c?2:0))+b.lvl*.4+b.i*.05))[0];
@@ -2311,7 +2402,7 @@ function renderBuildTab(){
         <div class="bit-move"><button class="ib" data-bup="${i}" aria-label="Move up" ${i===0?'disabled':''}>↑</button><button class="ib" data-bdown="${i}" aria-label="Move down" ${i===d.items.length-1?'disabled':''}>↓</button><button class="ib" data-bdel="${i}" aria-label="Remove ${esc(e.name)}">✕</button></div></div>
       <div class="bit-ctl">
         <span class="stp"><button class="ib" data-bset="${i}|-1" aria-label="Fewer sets">−</button><b>${x.sets}</b><small>sets</small><button class="ib" data-bset="${i}|1" aria-label="More sets">+</button></span>
-        <label class="bf"><input id="breps-${i}" data-breps="${i}" value="${esc(x.reps)}" maxlength="16" title="Use slashes for a pyramid, e.g. 12/10/8/6" aria-label="Reps for ${esc(e.name)}"><small>reps</small></label>
+        <label class="bf"><input id="breps-${i}" data-breps="${i}" value="${esc(x.reps)}" maxlength="16"  title="${isTimed(x.n)?'Seconds, e.g. 30–45 s':'Use slashes for a pyramid, e.g. 12/10/8/6'}" aria-label="${isTimed(x.n)?'Seconds':'Reps'} for ${esc(e.name)}"><small>${isTimed(x.n)?'time':'reps'}</small></label>
         <label class="bf"><select id="brest-${i}" data-brest="${i}" aria-label="Rest for ${esc(e.name)}">${RESTS.map(r=>`<option value="${r}" ${+x.rest===r?'selected':''}>${fmtRest(r)}</option>`).join('')}</select><small>rest</small></label>
         ${i<d.items.length-1?`<button class="chip sm ${x.ss?'on':''}" data-bss="${i}" aria-pressed="${!!x.ss}">${x.ss?'Superset ✓':'Superset with next'}</button>`:''}
         <button class="chip sm ${x.tech==='drop'?'on':''}" data-bdrop="${i}" aria-pressed="${x.tech==='drop'}">${x.tech==='drop'?'Drop set ✓':'Drop set'}</button>
@@ -2358,6 +2449,7 @@ document.addEventListener('click',ev=>{
   if(t.dataset.figsw){A.fig=fem()?'m':'f';save();rebuild();render();toast(fem()?'Showing the female figure':'Showing the male figure');return;}
   if(t.dataset.tab){S.tab=t.dataset.tab;S.saving=false;window.scrollTo(0,0);render();return;}
   if(t.dataset.gmode){A.mode=t.dataset.gmode;save();rebuild();S.gymDay=null;S.review=null;if(S.tab==='gym')renderGym();else if(S.tab==='build')bRender();else renderPlan();toast(A.mode==='custom'?'Gym tab now runs your build':'Gym tab now runs the suggested plan');return;}
+  if(t.dataset.how){S.how=S.how===t.dataset.how?null:t.dataset.how;renderList();return;}
   if(t.dataset.bmadd){S.bmAdd=S.bmAdd===t.dataset.bmadd?null:t.dataset.bmadd;renderList();return;}
   if(t.dataset.bmto){
     const e=findEx(S.sel,S.bmAdd);if(!e)return;let b,pi=0,di=0;

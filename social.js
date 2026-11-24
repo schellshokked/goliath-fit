@@ -259,7 +259,7 @@
   submitReview = function(){
     _submit.apply(this, arguments);
     const h = HIST[0]; if (!me || !h) return;
-    const items = (h.items || []).filter(x => x.w != null && x.r != null && x.w >= 0 && x.r > 0);
+    const items = (h.items || []).filter(x => x.w != null && x.r != null && x.w >= 0 && x.r > 0 && !(typeof isTimed === 'function' && isTimed(x.n)));
     const best = items.sort((a, b) => b.w * (1 + b.r / 30) - a.w * (1 + a.r / 30)).slice(0, 3).map(x => ({n: x.n, w: x.w, r: x.r}));
     const sets = (h.items || []).reduce((t, x) => t + (+x.s || 0), 0);
     const plan = GP && GP.custom ? `${GP.name}${GP.weekInfo && GP.weekInfo !== 'Every week' && GP.weekInfo !== 'Single workout' ? ' · ' + GP.weekInfo.split(' · ').slice(0, 1)[0] : ''}` : 'Suggested plan';
