@@ -306,6 +306,25 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .set.done{background:var(--green);border-color:var(--green);color:var(--surface)}
 .g-meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:12.5px;color:var(--muted)}
 .g-detail{font-size:13.5px;color:var(--muted);display:grid;gap:4px}
+.g-est{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.g-est .pill{display:inline-flex;align-items:baseline;gap:5px;border-radius:8px;padding:5px 9px;background:var(--surface-2);font-size:12.5px;color:var(--muted);white-space:nowrap}
+.g-est .pill b{font:700 14px var(--f-mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.g-est .pill.ok{background:var(--green-soft)} .g-est .pill.ok b{color:var(--green)}
+.g-est .pill.hi{background:var(--yellow-soft)} .g-est .pill.hi b{color:var(--yellow)}
+.g-est .pill.zero{background:var(--red-soft)} .g-est .pill.zero b{color:var(--red)}
+.g-est .pill.mus{background:var(--accent-soft);color:var(--ink)} .g-est .pill.mus b{font:700 12.5px var(--f-body);color:var(--accent)}
+.g-mus{display:flex;align-items:center;gap:12px}
+.g-mus svg{height:96px;width:auto;flex:none}
+.g-mus p{margin:0;font-size:13px;color:var(--muted)}
+.calc{display:grid;gap:12px;margin-top:10px}
+.calc .ins{display:flex;gap:10px;flex-wrap:wrap}
+.calc .ins label{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
+.calc .ins input{width:92px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:10px;padding:10px;font:600 18px var(--f-mono);text-align:center}
+.calc .big{font:700 30px var(--f-mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.calc table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.calc th,.calc td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right}
+.calc th:first-child,.calc td:first-child{text-align:left}
+.calc th{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .g-cardio{display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;font-size:14.5px}
 .g-alt-btn{justify-self:start;display:inline-flex;align-items:center;gap:6px;border:1px dashed var(--muted);background:none;border-radius:999px;padding:7px 13px;font-size:13px;font-weight:650;color:var(--ink)}
 .g-alt-btn.on{border-style:solid;background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -1784,6 +1803,56 @@ function targetFor(name,it){
   if(cap&&w>cap){w=cap;r=Math.max(top,Math.min(top+10,Math.round(30*(e1/cap-1)-2)));}
   return {w,r,flag:s.flag||null};
 }
+// ---------- 1RM and reps-in-reserve estimates ----------
+// Epley and Brzycki agree closely up to ~10 reps; average them there, Epley beyond
+function est1RM(w,r){w=+w;r=+r;if(!(w>0)||!(r>0))return null;if(r===1)return w;const ep=w*(1+r/30);return r<=10?(ep+w*36/(37-r))/2:ep;}
+const repsAt=(e1,w)=>30*(e1/w-1);                       // most reps you could do at w (Epley, inverted)
+const rnd=(v,u)=>{const inc=u==='kg'?2.5:5;return Math.round(v/inc)*inc;};
+// best strength estimate from before today: the review history (which already reads your rating), else the last session's logged set
+function baseE1(name){
+  const s=STR.ex&&STR.ex[name];if(s&&s.e1>0)return {v:cvU(s.e1,s.u),src:'review'};
+  const L=LOG[name];if(!L)return null;
+  if(L.r>0&&L.rat&&new Date(L.rat).toDateString()!==today()){const w=new Date(L.at).toDateString()===today()?L.pw:L.w;if(w>0)return {v:est1RM(w,L.r+2),src:'last'};}   // logged sets are assumed to stop ~2 reps short, as the plan asks
+  if(L.pe1>0)return {v:L.pe1,src:'last'};
+  return null;
+}
+function musclesOf(e){
+  const sec=e.c?Object.entries(SEC[e.g]||{}).sort((a,b)=>b[1]-a[1]).map(([g])=>g):[];
+  return {main:e.g,sec};
+}
+function estHTML(ex,w,r){
+  const u=GP.unit,base=baseE1(ex.name),now=est1RM(w,r),m=musclesOf(ex);
+  const out=[];
+  // a set short of failure only proves a lower bound, so the higher of this set and your history is the better guess
+  if(now&&(!base||now>base.v))out.push(`<span class="pill" title="Estimated one-rep max from this set">1RM <b>~${rnd(now,u)}</b>${r>12?' rough':''}</span>`);
+  else if(base)out.push(`<span class="pill" title="Estimated one-rep max from your logged sets">1RM <b>~${rnd(base.v,u)}</b></span>`);
+  if(w>0&&r>0&&base){
+    const left=Math.round(repsAt(base.v,+w)-r);
+    if(left<0)out.push(`<span class="pill ok" title="More reps than your estimate says you had">RIR <b>0</b> new best</span>`);
+    else{const c=left===0?'zero':left<=3?'ok':'hi';out.push(`<span class="pill ${c}" title="Reps in reserve: how many more you likely had">RIR <b>~${left>5?'5+':left}</b> ${left===0?'at failure':left<=3?'on target':'add weight'}</span>`);}
+  } else if(w>0&&r>0) out.push(`<span class="pill" title="Needs one logged session first">RIR after 1 session</span>`);
+  else out.push(`<span class="pill" title="Stop each set with this many reps left">Aim <b>1–3</b> RIR</span>`);
+  out.push(`<span class="pill mus"><b>${GROUPS[m.main].n}</b>${m.sec.length?' + '+m.sec.map(g=>GROUPS[g].n).join(', '):''}</span>`);
+  return out.join('');
+}
+function musFig(ex){
+  const m=musclesOf(ex),eff={};eff[m.main]=1;m.sec.forEach(g=>eff[g]=(SEC[m.main][g]||.3));
+  return `<div class="g-mus"><svg viewBox="0 0 200 392" aria-hidden="true">${paintFig(figF(),eff,1)}</svg><svg viewBox="0 0 200 392" aria-hidden="true">${paintFig(figB(),eff,1)}</svg><p><b style="color:var(--ink)">Working: ${GROUPS[m.main].n}.</b>${m.sec.length?` Also ${m.sec.map(g=>GROUPS[g].n.toLowerCase()).join(', ')}.`:' Isolation: one muscle does the work.'}</p></div>`;
+}
+function paintEst(name){
+  const k=slug(name);document.querySelectorAll(`[data-est="${k}"]`).forEach(el=>{
+    const w=document.querySelector(`input[data-wname="${CSS.escape(name)}"]`),r=document.querySelector(`input[data-rname="${CSS.escape(name)}"]`);
+    const ex=findAny(name);if(ex)el.innerHTML=estHTML(ex,w&&w.value,r&&r.value);
+  });
+}
+const findAny=n=>{for(const g in EX){const e=EX[g].find(x=>x.name===n);if(e)return e;}return null;};
+function calcHTML(){
+  const u=GP?GP.unit:'lb',c=S.calc||{w:'',r:'',rir:'0'},e1=est1RM(c.w,(+c.r||0)+(+c.rir||0));
+  return `<div class="calc"><div class="ins"><label>Weight (${u})<input id="calcW" type="number" inputmode="decimal" value="${esc(c.w)}" placeholder="185"></label><label>Reps<input id="calcR" type="number" inputmode="numeric" value="${esc(c.r)}" placeholder="8"></label><label>Reps left (RIR)<input id="calcRir" type="number" inputmode="numeric" value="${esc(c.rir)}" placeholder="0"></label></div>
+    <div id="calcOut">${e1?`<div><span class="big">~${rnd(e1,u)} ${u}</span><div style="font-size:13px;color:var(--muted)">Estimated one-rep max${(+c.r+(+c.rir||0))>12?' (rough above 12 reps)':''}</div></div>
+    <table><tr><th>Reps</th><th>% of 1RM</th><th>Weight</th><th>At 2 RIR</th></tr>${[1,3,5,6,8,10,12,15].map(n=>{const w=n===1?e1:e1/(1+n/30);const w2=e1/(1+(n+2)/30);return `<tr><td>${n}</td><td>${Math.round(w/e1*100)}%</td><td>${rnd(w,u)}</td><td>${n===1?'–':rnd(w2,u)}</td></tr>`;}).join('')}</table>`:'<p style="margin:0;font-size:13.5px;color:var(--muted)">Enter a set you did: weight and reps, plus how many more reps you think you had left.</p>'}</div></div>`;
+}
+
 // ---------- workout review ----------
 const CMT_ICON='<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5v8a1.5 1.5 0 0 1-1.5 1.5H8l-4 3v-3h0.5A1.5 1.5 0 0 1 3 12.5z"/></svg>';
 const RATE=[[1,'Way too hard','Missed reps'],[2,'Hard','Last reps a grind'],[3,'Solid','About right'],[4,'Good','Reps to spare'],[5,'Too easy','Could do a lot more']];
@@ -1967,10 +2036,11 @@ function renderGym(){
         <div class="g-w r"><input data-rname="${esc(ex.name)}" type="number" inputmode="numeric" placeholder="${tg&&tg.r?tg.r:topReps(it)}" value="${lastToday&&last.r?esc(last.r):''}" aria-label="Reps for ${esc(ex.name)}"><span>reps</span></div>
         <div class="sets">${[...Array(it.sets).keys()].map(i=>`<button class="set ${CHECKS.has(k+'|'+i)?'done':''}" data-set="${esc(k)}|${i}" data-rest="${isLastInBlock?it.rest:0}" aria-label="Set ${i+1}">${i+1}</button>`).join('')}</div>
       </div>
+      <div class="g-est" data-est="${slug(ex.name)}">${estHTML(ex,last?last.w:'',lastToday&&last.r?last.r:'')}</div>
       <div class="g-meta"><span>${isLastInBlock?'Rest '+fmtRest(it.rest):'Go straight to the next exercise'}</span>${last&&last.w!=null?`<span>· last time ${esc(last.w)} ${u}${last.r?' × '+esc(last.r):''}</span>`:''}${tg?`<span>· target ~${tg.w} ${u}${tg.r?' × '+tg.r:''}</span>`:(!last&&ph?`<span>· start ~${ph} ${u}</span>`:'')}${tg&&tg.flag==='pain'?'<span class="tag warn">Pain last time · hold weight</span>':''}${tg&&tg.r?'<span class="tag warn">Weight capped · more reps</span>':''}${flags.map(x=>`<span class="tag ${x.k==='s'?'spot':x.k==='t'?'':'plan'}">${x.t.replace(/^Don't let your (.+) take over$/,"Watch the $1")}</span>`).join('')}</div>
       <button class="g-alt-btn ${altOpen?'on':''}" data-galt="${esc(k)}" aria-expanded="${altOpen}"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6.2"/><path d="M3.6 12.4l8.8-8.8"/></svg>${altOpen?'Close':EQ_TAKEN[ex.eq]}</button>
       ${altPanel}
-      ${open?`<div class="g-detail"><span>${ex.cue}</span>${isSub?'':it.notes.map(x=>`<span><b style="color:var(--ink)">${x.t}.</b> ${x.d}</span>`).join('')}</div>`:''}
+      ${open?`<div class="g-detail">${musFig(ex)}<span>${ex.cue}</span>${isSub?'':it.notes.map(x=>`<span><b style="color:var(--ink)">${x.t}.</b> ${x.d}</span>`).join('')}</div>`:''}
     </div>`;
   };
   const blocks=d.blocks.map((b,bi)=>{
@@ -1987,8 +2057,9 @@ function renderGym(){
     ${d.primer&&d.primer.length?`<details class="g-primer"><summary>Posture primer · ${d.primer.length} moves, about 6 min</summary><ul>${d.primer.map(x=>`<li>${x}</li>`).join('')}</ul></details>`:''}
     <div class="gym-cards">${blocks}
     ${d.cardio?`<div class="g-cardio"><button class="set ${CHECKS.has(cardioKey)?'done':''}" data-set="${cardioKey}" data-rest="0" aria-label="Cardio done">✓</button><span>${d.cardio}</span></div>`:''}</div>
+    <details class="g-primer" id="calcBox"${S.calcOpen?' open':''}><summary>1RM &amp; RIR calculator</summary>${calcHTML()}</details>
     <button class="btn" id="finishBtn">Finish workout</button>
-    <p class="hint" style="margin:0">Tap an exercise name for form cues. Log the weight and reps of your best set; finishing asks how it went and updates your targets.</p>
+    <p class="hint" style="margin:0">Tap an exercise name for form cues and the muscles it works. Log the weight and reps of your best set to see your estimated 1RM and reps in reserve (RIR); finishing asks how it went and updates your targets.</p>
     ${HIST.length?`<details class="g-primer"><summary>Recent workouts · ${HIST.length}</summary><ul>${HIST.slice(0,6).map(h=>`<li><b style="color:var(--ink)">${new Date(h.at).toLocaleDateString(undefined,{month:'short',day:'numeric'})} · ${esc(h.day)}</b> · rated ${h.rating}/5${h.comment?` · “${esc(h.comment)}”`:''}</li>`).join('')}</ul></details>`:''}
     ${A.savedId?'':`<div class="panel" style="font-size:14px">This plan isn't saved yet. <button class="chip sm" data-tab="plan" style="margin-left:6px">Save it</button></div>`}
   </div>`;
@@ -2392,13 +2463,16 @@ document.addEventListener('change',ev=>{
   }
   if(t.dataset&&t.dataset.rname){
     const n=t.dataset.rname,v=t.value.trim();
-    if(v===''){if(LOG[n]){delete LOG[n].r;delete LOG[n].rat;}}else{const num=parseInt(v,10);if(!(num>0&&num<200))return;LOG[n]=Object.assign({},LOG[n]||{},{r:num,rat:Date.now()});}
+    if(v===''){if(LOG[n]){delete LOG[n].r;delete LOG[n].rat;}}else{const num=parseInt(v,10);if(!(num>0&&num<200))return;const o=LOG[n],b=baseE1(n);LOG[n]=Object.assign({},o||{},{r:num,rat:Date.now()});if(b&&b.src==='last')LOG[n].pe1=Math.round(b.v*10)/10;}
     writeProfile();
   }
 });
+document.addEventListener('toggle',ev=>{if(ev.target.id==='calcBox')S.calcOpen=ev.target.open;},true);
 document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&ev.target.id==='planName'){ev.preventDefault();savePlan(!A.savedId,ev.target.value);}});
 document.addEventListener('input',ev=>{
   const t=ev.target;
+  if(t.dataset&&(t.dataset.wname||t.dataset.rname)&&!S.review){paintEst(t.dataset.wname||t.dataset.rname);}
+  if(t.id==='calcW'||t.id==='calcR'||t.id==='calcRir'){S.calc={w:$('#calcW').value,r:$('#calcR').value,rir:$('#calcRir').value};const tmp=document.createElement('div');tmp.innerHTML=calcHTML();$('#calcOut').innerHTML=tmp.querySelector('#calcOut').innerHTML;return;}
   if(S.review&&S.review.rows){
     if(t.id==='fbNote'){S.review.comment=t.value;const ro=$('#fbRead');if(ro)ro.innerHTML=readFeedback(t.value,S.review.rows);return;}
     if(t.dataset.fbw!=null){const r=S.review.rows[+t.dataset.fbw];r.w=t.value.trim();if(r.w!==''&&!r.use){r.use=true;t.closest('.fb-row').classList.remove('off');}return;}
