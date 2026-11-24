@@ -77,12 +77,12 @@
     else if (owner === u.id && hasLocalData()){ pushNow(); }
     else { clearLocal(); writeLocal(); resetView(); localStorage.setItem(OWNER, u.id); pushNow(); }   // new account: create its row right away
     localStorage.setItem(OWNER, u.id);
-    paintStatus();
+    paintAvatar(); paintStatus();
   }
   async function signOut(){
     if (pending) await pushNow();
     await sb.auth.signOut();
-    user = null; clearLocal(); localStorage.removeItem(OWNER); resetView(); showGate('in');
+    closeMenu(); user = null; paintAvatar(); clearLocal(); localStorage.removeItem(OWNER); resetView(); showGate('in');
   }
 
   // ---------- sign-in screen ----------
@@ -106,7 +106,21 @@
   .acct .who small{color:var(--muted);font-size:12.5px}
   .acct .row{flex-wrap:wrap}
   .acct .row .chip{flex:none}
-  .mig{border:1.5px solid var(--accent);background:var(--accent-soft)}`;
+  .mig{border:1.5px solid var(--accent);background:var(--accent-soft)}
+  .avatar-btn{width:38px;height:38px;border-radius:50%;border:0;padding:0;background:var(--ink);color:var(--bg);font:700 16px/1 var(--f-body);display:grid;place-items:center;flex:none;box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--line)}
+  .avatar-btn[aria-expanded="true"]{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+  .acct-menu{position:fixed;z-index:30;top:calc(60px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:min(300px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 36px rgba(0,0,0,.18);padding:16px;display:grid;gap:12px}
+  .acct-menu .who{display:flex;align-items:center;gap:12px;min-width:0}
+  .acct-menu .av{width:44px;height:44px;border-radius:50%;background:var(--ink);color:var(--bg);display:grid;place-items:center;font:700 19px var(--f-body);flex:none}
+  .acct-menu .who b{display:block;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acct-menu .who small{display:block;color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acct-menu .st{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .acct-menu .st i{width:8px;height:8px;border-radius:50%;background:var(--green);flex:none}
+  .acct-menu .st.warn i{background:var(--yellow)}
+  .acct-menu .mi{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:12px 2px 0;font-weight:600;font-size:15px}
+  .acct-menu .mi.out{color:var(--red)}
+  .acct-menu .nm{display:flex;gap:6px}
+  .acct-menu .nm input{flex:1;min-width:0;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:9px;padding:8px 10px;font:600 15px var(--f-body)}`;
   document.head.appendChild(css);
   const gate = document.createElement('div');
   gate.className = 'gate'; gate.hidden = true; gate.setAttribute('role', 'dialog'); gate.setAttribute('aria-label', 'Sign in to Goliath');
@@ -169,27 +183,56 @@
 
   // ---------- account panel on the My program tab ----------
   const STATUS = {idle:'', saving:'Saving…', saved:'All changes saved to your account', offline:'Offline. Changes will sync when you reconnect.', error:'Could not sync just now. It will retry.'};
-  function paintStatus(){ const el = document.getElementById('acctStatus'); if (el) el.textContent = STATUS[syncState] || ''; }
+  function paintStatus(){ const el = document.getElementById('acctStatus'); if (!el) return; el.querySelector('span').textContent = STATUS[syncState] || 'Signed in'; el.classList.toggle('warn', syncState === 'offline' || syncState === 'error' || syncState === 'saving'); }
+  // ---------- profile button (top right) and its menu ----------
+  const firstName = () => ((user && user.user_metadata && user.user_metadata.name) || '').trim().split(/\s+/)[0] || '';
+  const initial = () => (firstName() || (user && user.email) || '?')[0].toUpperCase();
+  function paintAvatar(){
+    const slot = document.getElementById('topR'); if (!slot) return;
+    slot.querySelector('.avatar-btn') && slot.querySelector('.avatar-btn').remove();
+    if (!user) return;
+    slot.insertAdjacentHTML('beforeend', `<button class="avatar-btn" id="avatarBtn" aria-haspopup="true" aria-expanded="false" aria-controls="acctMenu" aria-label="Your account${firstName() ? ', ' + esc(firstName()) : ''}">${esc(initial())}</button>`);
+  }
+  const menu = document.createElement('div'); menu.className = 'acct-menu'; menu.id = 'acctMenu'; menu.hidden = true; menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-label', 'Your account');
+  document.body.appendChild(menu);
+  function openMenu(){
+    const nm = firstName(), full = ((user.user_metadata && user.user_metadata.name) || '').trim();
+    menu.innerHTML = `<div class="who"><span class="av" aria-hidden="true">${esc(initial())}</span><span style="min-width:0"><b>${esc(full || 'Add your name')}</b><small>${esc(user.email)}</small></span></div>
+      <div class="st" id="acctStatus"><i></i><span></span></div>
+      ${nm ? '' : `<form class="nm" data-acctname="1"><input id="acctName" placeholder="First name" maxlength="40" autocomplete="given-name" aria-label="First name"><button class="chip sm ink on" type="submit">Save</button></form>`}
+      <button class="mi" data-acct="pw">Change password</button>
+      <button class="mi out" data-acct="out">Sign out</button>`;
+    menu.hidden = false; paintStatus();
+    const b = document.getElementById('avatarBtn'); if (b) b.setAttribute('aria-expanded', 'true');
+  }
+  function closeMenu(){ menu.hidden = true; const b = document.getElementById('avatarBtn'); if (b) b.setAttribute('aria-expanded', 'false'); }
+  document.addEventListener('click', e => {
+    if (e.target.closest('#avatarBtn')){ menu.hidden ? openMenu() : closeMenu(); return; }
+    if (!menu.hidden && !e.target.closest('#acctMenu')) closeMenu();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden){ closeMenu(); const b = document.getElementById('avatarBtn'); if (b) b.focus(); } });
+  menu.addEventListener('submit', async e => {
+    e.preventDefault(); const v = (menu.querySelector('#acctName') || {}).value || ''; if (!v.trim()) return;
+    const {data, error} = await sb.auth.updateUser({data: {name: v.trim()}});
+    if (error){ toast('Could not save your name. Try again.'); return; }
+    user = data.user; paintAvatar(); openMenu(); toast('Thanks, ' + firstName());
+  });
   const _renderPlan = renderPlan;
   renderPlan = function(){
     _renderPlan();
-    if (!user || S.quiz) return;
-    const nm = (user.user_metadata && user.user_metadata.name) || '';
+    if (!user || S.quiz || !offerMigrate) return;
     const el = document.getElementById('tabPlan');
     el.insertAdjacentHTML('afterbegin', `${offerMigrate ? `<div class="panel mig acct" role="alert"><b>Plans from before accounts are on this phone.</b><span style="font-size:14px">Add them to your account so they follow you to other devices?</span><div class="row"><button class="btn" data-acct="keep">Add to my account</button><button class="btn ghost" data-acct="fresh">Start fresh</button></div></div>` : ''}
-      <div class="panel acct"><div class="who"><span class="av" aria-hidden="true">${esc((nm || user.email || '?')[0].toUpperCase())}</span><span style="min-width:0"><b>${esc(nm || user.email)}</b>${nm ? `<small style="display:block">${esc(user.email)}</small>` : ''}<small id="acctStatus" style="display:block">${STATUS[syncState] || ''}</small></span></div>
-      <div class="row"><button class="chip sm" data-acct="pw">Change password</button><button class="chip sm" data-acct="out">Sign out</button></div></div>`);
+`);
   };
   document.addEventListener('click', async e => {
     const b = e.target.closest('[data-acct]'); if (!b) return;
     const a = b.dataset.acct;
     if (a === 'out') return signOut();
-    if (a === 'pw'){ const {error} = await sb.auth.resetPasswordForEmail(user.email, {redirectTo: location.origin + location.pathname}); toast(error ? 'Could not send the email. Try again.' : 'Password reset link sent to ' + user.email); return; }
+    if (a === 'pw'){ closeMenu(); const {error} = await sb.auth.resetPasswordForEmail(user.email, {redirectTo: location.origin + location.pathname}); toast(error ? 'Could not send the email. Try again.' : 'Password reset link sent to ' + user.email); return; }
     if (a === 'keep'){ offerMigrate = false; await pushNow(); renderPlan(); toast('Your plans are now in your account'); return; }
     if (a === 'fresh'){ offerMigrate = false; clearLocal(); writeLocal(); await pushNow(); resetView(); toast('Started fresh'); return; }
   });
-  // the logo opens your account
-  document.addEventListener('click', e => { if (user && e.target.closest('.top .mark')){ S.tab = 'plan'; S.quiz = false; render(); window.scrollTo(0, 0); } });
 
   // ---------- start ----------
   if (!window.supabase || !window.supabase.createClient){
