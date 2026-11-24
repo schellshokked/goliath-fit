@@ -4,7 +4,7 @@
   const AUTH = window.__goliathAuth;
   if (!AUTH) return;                                   // accounts are off: no Social tab
   let me = null, profile = null, friends = [], feed = [], profiles = {}, loading = false, loaded = false, err = '';
-  let open = null, confirmRemove = null, sending = false, formMsg = null;
+  let open = null, confirmRemove = null, sending = false, formMsg = null, addOpen = false, addTouched = false, setOpen = false;
   let shares = [], send = null;   // send = {prog, friend, note, busy} while the send-a-program panel is open
   let msgs = [], chat = null, rt = null, rtOk = false, lastSetAt = 0, lastBeat = 0, cheered = new Set();
   const ONLINE_MS = 150000;        // a heartbeat newer than 2.5 min counts as online
@@ -18,6 +18,7 @@
   .soc{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding-block:6px 80px;max-width:720px;margin:0 auto}
   .soc .panel,.soc .fr,.soc .req,.soc .wk{min-width:0}
   .soc h1{font-size:46px}
+  .soc-head h1{white-space:nowrap;font-size:clamp(30px,9.6vw,46px)}
   .soc .add{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
   .soc .add .inrow{display:flex;gap:8px}
   .soc .add input{flex:1;min-width:0;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:12px;font:600 16px var(--f-body)}
@@ -67,6 +68,16 @@
   .shr{display:grid;gap:10px}
   .shr + .shr{border-top:1px solid var(--line);padding-top:12px}
   .shr q{font-size:14px;color:var(--muted);font-style:italic}
+  .soc-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+  .soc-head > div{min-width:0}
+  .soc-acts{display:flex;gap:8px;flex:none;padding-bottom:6px}
+  .icobtn{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);display:grid;place-items:center;padding:0}
+  .icobtn svg{width:22px;height:22px}
+  .icobtn[aria-expanded="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .icobtn.add{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+  .icobtn.add[aria-expanded="true"]{background:var(--ink);border-color:var(--ink)}
+  .soc .sets{display:grid;gap:14px}
+  .soc .sets .switch + .switch{border-top:1px solid var(--line);padding-top:14px}
   .soc .empty{text-align:left;padding:4px 0;color:var(--muted);font-size:14px}
   .avw{position:relative;flex:none;display:grid}
   .pp > .avw{flex:none;min-width:auto}
@@ -113,7 +124,7 @@
     _render();
     main.hidden = S.tab !== 'social'; tb.classList.toggle('on', S.tab === 'social');
     if (S.tab === 'social'){ document.getElementById('viewSeg').hidden = true; renderSocial(); if (!loading && me) load(); }
-    else if (chat){ chat = null; }
+    else { chat = null; formMsg = null; addOpen = false; setOpen = false; }
   };
 
   // ---------- data ----------
@@ -330,15 +341,19 @@
     const inc = incoming(), out = outgoing(), acc = accepted();
     const mine = weekDots(me.id);
     const live = acc.map(otherOf).filter(u => u && presenceOf(u).on);
+    const showAdd = addOpen || (loaded && !acc.length && !out.length && !inc.length && !addTouched);
     main.innerHTML = `<div class="soc">
-      <div><div class="eyebrow">Social</div><h1 class="display">Your crew</h1>
-      <p class="lede" style="margin-top:8px">Add friends by email and keep up with each other's workouts. They only see what you finish in the Gym tab, never your body stats, injuries or notes.</p></div>
-      ${live.length ? `<div class="panel"><div class="eyebrow" style="margin-bottom:10px">Online now</div><div class="online-strip">${live.map(u => `<button data-soc="chat" data-uid="${u}" aria-label="Message ${esc(nameOf(u))}, ${esc(presenceOf(u).txt)}">${avHTML(u)}<small>${esc(nameOf(u).split(' ')[0])}</small></button>`).join('')}</div></div>` : ''}
-      <form class="panel add" id="socAdd" novalidate>
-        <label class="eyebrow" for="socEmail">Add a friend</label>
+      <div class="soc-head"><div><div class="eyebrow">Social</div><h1 class="display">Your crew</h1></div>
+        <div class="soc-acts"><button class="icobtn add" data-soc="addtoggle" aria-expanded="${showAdd}" aria-controls="socAdd" aria-label="Add a friend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/><path d="M19 8v6M16 11h6"/></svg></button><button class="icobtn" data-soc="settoggle" aria-expanded="${setOpen}" aria-controls="socSet" aria-label="Social settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div></div>
+      ${setOpen ? `<div class="panel sets" id="socSet"><div class="eyebrow">Settings</div>
+        <div class="switch"><div><b>Show when I'm online</b><br><span>${profile && profile.presence === false ? 'Friends can\'t see when you\'re on the app.' : 'Friends see a green dot, and "Working out" while you log sets.'}</span></div><button role="switch" aria-checked="${!(profile && profile.presence === false)}" aria-label="Show when I'm online" data-soc="presence"></button></div>
+        <div class="switch"><div><b>Share my workouts</b><br><span>${profile && profile.share === false ? 'Friends can\'t see your workouts right now.' : 'Friends see each workout you finish.'}</span></div><button role="switch" aria-checked="${!(profile && profile.share === false)}" aria-label="Share my workouts with friends" data-soc="share"></button></div>
+        <p class="hint" style="text-align:left;margin:0">Friends only ever see workouts you finish in the Gym tab, never your body stats, injuries or notes.</p></div>` : ''}
+      ${showAdd || formMsg ? `<form class="panel add" id="socAdd" novalidate>
+        <label class="eyebrow" for="socEmail">Add a friend by email</label>
         <div class="inrow"><input id="socEmail" type="email" inputmode="email" autocomplete="off" placeholder="friend@email.com" aria-label="Friend's email"><button class="btn" type="submit" ${sending ? 'disabled' : ''}>${sending ? 'Sending…' : 'Send'}</button></div>
         ${formMsg ? `<div class="msg ${formMsg.k}" role="status">${esc(formMsg.t)}</div>` : '<span class="hint" style="text-align:left">They see your request next time they open Goliath. If they don\'t have an account yet, it waits for them.</span>'}
-      </form>
+      </form>` : ''}
       ${send ? sendPanel() : ''}
       ${shares.length ? `<div class="panel"><h3>Programs for you</h3>${shares.map(sh => `<div class="shr"><div class="pp"><span class="av" aria-hidden="true">${esc((sh.sender_name || '?')[0].toUpperCase())}</span><span><b>${esc(sh.name)}</b><small>From ${esc(sh.sender_name || 'a friend')} · ${esc(shareSummary(sh))} · ${esc(ago(sh.created_at))}</small></span></div>${sh.note ? `<q>${esc(sh.note)}</q>` : ''}<div class="row"><button class="chip sm ink on" style="flex:none" data-soc="shadd" data-id="${sh.id}">Add to my builds</button><button class="chip sm" style="flex:none" data-soc="shdrop" data-id="${sh.id}">Dismiss</button></div></div>`).join('')}</div>` : ''}
       ${err ? `<div class="panel" role="alert" style="color:var(--red)">${esc(err)}</div>` : ''}
@@ -350,13 +365,12 @@
           const line = un && lm ? {c: 'new', t: lm.body} : pr.on ? {c: 'live', t: pr.txt} : last ? {c: '', t: `Last: ${last.day_name}, ${ago(last.done_at)}`} : pr.txt ? {c: '', t: pr.txt} : {c: '', t: 'No workouts shared yet'};
           return `<div class="fr"><div class="frrow"><button class="pp" data-soc="open" data-uid="${uid}" aria-expanded="${isOpen}">${avHTML(uid)}<span><b>${esc(nameOf(uid))}</b><small class="${line.c}">${esc(line.t)}</small></span>${d.html}</button><button class="msgbtn" data-soc="chat" data-uid="${uid}" aria-label="Message ${esc(nameOf(uid))}${un ? `, ${un} unread` : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.4-4.9A8 8 0 1 1 21 12z"/></svg>${un ? `<span class="tab-dot">${un}</span>` : ''}</button></div>
           ${isOpen ? `${feed.filter(w => w.user_id === uid).slice(0, 5).map(wkCard).join('') || '<p class="empty">Nothing in the last 4 weeks.</p>'}<div class="row" style="flex-wrap:wrap"><button class="chip sm ink on" style="flex:none" data-soc="chat" data-uid="${uid}">Message</button><button class="chip sm" style="flex:none" data-soc="sendto" data-uid="${uid}">Send a program</button>${confirmRemove === f.id ? `<button class="chip sm" style="color:var(--red);flex:none" data-soc="remove" data-id="${f.id}">Remove ${esc(nameOf(uid))}</button><button class="chip sm" style="flex:none" data-soc="keep">Keep</button>` : `<button class="chip sm" style="flex:none" data-soc="askremove" data-id="${f.id}">Remove friend</button>`}</div>` : ''}</div>`; }).join('')}
-        ${!acc.length ? `<p class="empty">${loaded ? 'No friends yet. Add someone by email above.' : 'Loading…'}</p>` : ''}
+        ${!acc.length ? `<p class="empty">${loaded ? 'No friends yet. Tap the + button up top to add someone by email.' : 'Loading…'}</p>` : ''}
       </div>
+      ${acc.length ? `<div class="panel"><div class="eyebrow" style="margin-bottom:10px">Online now</div>${live.length ? `<div class="online-strip">${live.map(u => `<button data-soc="chat" data-uid="${u}" aria-label="Message ${esc(nameOf(u))}, ${esc(presenceOf(u).txt)}">${avHTML(u)}<small>${esc(nameOf(u).split(' ')[0])}</small></button>`).join('')}</div>` : '<p class="empty" style="margin:0;padding:0">No friends online right now.</p>'}</div>` : ''}
       ${acc.length && !send ? `<button class="btn ghost" data-soc="sendopen">Send a program to a friend</button>` : ''}
       ${acc.length ? `<div><div class="eyebrow" style="margin:4px 0 10px">Recent workouts</div><div style="display:grid;gap:10px">${feed.slice(0, 25).map(wkCard).join('') || '<p class="empty">No workouts yet. Finish one in the Gym tab and it shows up here.</p>'}</div></div>` : ''}
       ${out.length ? `<div class="panel"><h3>Waiting for a reply</h3>${out.map(f => `<div class="req"><div class="pp"><span class="av" aria-hidden="true" style="background:var(--muted)">${esc(f.addressee_email[0].toUpperCase())}</span><span><b>${esc(f.addressee_email)}</b><small>Sent ${esc(ago(f.created_at))}</small></span><button class="chip sm" style="flex:none" data-soc="cancel" data-id="${f.id}">Cancel</button></div></div>`).join('')}</div>` : ''}
-      <div class="panel switch"><div><b>Show when I'm online</b><br><span>${profile && profile.presence === false ? 'Friends can\'t see when you\'re on the app.' : 'Friends see a green dot, and "Working out" while you log sets.'}</span></div><button role="switch" aria-checked="${!(profile && profile.presence === false)}" aria-label="Show when I'm online" data-soc="presence"></button></div>
-      <div class="panel switch"><div><b>Share my workouts</b><br><span>${profile && profile.share === false ? 'Friends can\'t see your workouts right now.' : 'Friends see each workout you finish.'}</span></div><button role="switch" aria-checked="${!(profile && profile.share === false)}" aria-label="Share my workouts with friends" data-soc="share"></button></div>
     </div>`;
     if (kv || kf){ const el = main.querySelector('#socEmail'); if (el){ el.value = kv; if (kf) el.focus(); } }
   }
@@ -447,6 +461,8 @@
     const a = b.dataset.soc, id = b.dataset.id;
     if (a === 'open'){ open = open === b.dataset.uid ? null : b.dataset.uid; confirmRemove = null; return renderSocial(); }
     if (a === 'askremove'){ confirmRemove = id; return renderSocial(); }
+    if (a === 'addtoggle'){ addOpen = !(main.querySelector('#socAdd')); addTouched = true; formMsg = null; renderSocial(); if (addOpen){ const el = main.querySelector('#socEmail'); if (el) el.focus(); } return; }
+    if (a === 'settoggle'){ setOpen = !setOpen; return renderSocial(); }
     if (a === 'chat'){ open = null; return openChat(b.dataset.uid); }
     if (a === 'chatback'){ chat = null; renderSocial(); window.scrollTo(0, 0); return; }
     if (a === 'quick'){ return sendMsg(chat, b.dataset.q); }
@@ -491,7 +507,7 @@
   });
   window.addEventListener('goliath:signout', () => {
     unsubscribe(); chat = null; msgs = [];
-    me = null; profile = null; friends = []; shares = []; send = null; feed = []; profiles = {}; loaded = false; open = null; formMsg = null;
+    me = null; profile = null; addOpen = false; addTouched = false; setOpen = false; friends = []; shares = []; send = null; feed = []; profiles = {}; loaded = false; open = null; formMsg = null;
     tb.hidden = true; paintBadge(); if (S.tab === 'social'){ S.tab = 'body'; render(); }
   });
   document.addEventListener('visibilitychange', () => {
