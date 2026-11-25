@@ -201,6 +201,7 @@
     menu.innerHTML = `<div class="who"><span class="av" aria-hidden="true">${esc(initial())}</span><span style="min-width:0"><b>${esc(full || 'Add your name')}</b><small>${esc(user.email)}</small></span></div>
       <div class="st" id="acctStatus"><i></i><span></span></div>
       ${nm ? '' : `<form class="nm" data-acctname="1"><input id="acctName" placeholder="First name" maxlength="40" autocomplete="given-name" aria-label="First name"><button class="chip sm ink on" type="submit">Save</button></form>`}
+      <button class="mi" data-acct="notif">Notifications</button>
       <button class="mi" data-acct="pw">Change password</button>
       <button class="mi out" data-acct="out">Sign out</button>`;
     menu.hidden = false; paintStatus();
@@ -230,6 +231,7 @@
     const b = e.target.closest('[data-acct]'); if (!b) return;
     const a = b.dataset.acct;
     if (a === 'out') return signOut();
+    if (a === 'notif'){ closeMenu(); window.dispatchEvent(new CustomEvent('goliath:notif')); return; }
     if (a === 'pw'){ closeMenu(); const {error} = await sb.auth.resetPasswordForEmail(user.email, {redirectTo: location.origin + location.pathname}); toast(error ? 'Could not send the email. Try again.' : 'Password reset link sent to ' + user.email); return; }
     if (a === 'keep'){ offerMigrate = false; await pushNow(); renderPlan(); toast('Your plans are now in your account'); return; }
     if (a === 'fresh'){ offerMigrate = false; clearLocal(); writeLocal(); await pushNow(); resetView(); toast('Started fresh'); return; }

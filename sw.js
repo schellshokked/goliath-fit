@@ -1,6 +1,6 @@
 // Goliath Strength Trainer offline support. Bump VERSION whenever index.html changes.
-const VERSION = 'goliath-v26';
-const SHELL = ['./', './index.html', './config.js', './auth.js', './social.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
+const VERSION = 'goliath-v27';
+const SHELL = ['./', './index.html', './config.js', './auth.js', './social.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png', './icons/badge-96.png', './notify.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -31,4 +31,25 @@ self.addEventListener('fetch', e => {
       return hit || net;
     }));
   }
+});
+
+// ---------- push notifications ----------
+self.addEventListener('push', e => {
+  let n = {};
+  try { n = e.data ? e.data.json() : {}; } catch { n = {title: 'Goliath', body: e.data ? e.data.text() : ''}; }
+  e.waitUntil(self.registration.showNotification(n.title || 'Goliath', {
+    body: n.body || '', tag: n.tag || undefined, renotify: !!n.tag,
+    icon: './icons/icon-192.png', badge: './icons/badge-96.png',
+    data: {url: n.url || './'}, vibrate: [80, 40, 80]
+  }));
+});
+// tapping a notification opens the app (or the open copy of it) at the right screen
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(list => {
+    const open = list.find(c => c.url.startsWith(self.registration.scope));
+    if (open){ open.postMessage({goliath: 'go', url}); return open.focus(); }
+    return self.clients.openWindow(url);
+  }));
 });

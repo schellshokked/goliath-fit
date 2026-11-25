@@ -373,6 +373,7 @@
       ${out.length ? `<div class="panel"><h3>Waiting for a reply</h3>${out.map(f => `<div class="req"><div class="pp"><span class="av" aria-hidden="true" style="background:var(--muted)">${esc(f.addressee_email[0].toUpperCase())}</span><span><b>${esc(f.addressee_email)}</b><small>Sent ${esc(ago(f.created_at))}</small></span><button class="chip sm" style="flex:none" data-soc="cancel" data-id="${f.id}">Cancel</button></div></div>`).join('')}</div>` : ''}
     </div>`;
     if (kv || kf){ const el = main.querySelector('#socEmail'); if (el){ el.value = kv; if (kf) el.focus(); } }
+    window.dispatchEvent(new Event('goliath:socialpaint'));
   }
 
   // ---------- chat screen ----------
@@ -420,6 +421,7 @@
     if (first){ markRead(uid); const ta = main.querySelector('#chatIn'); if (ta && matchMedia('(pointer:fine)').matches) ta.focus(); }
   }
   function openChat(uid){ chat = uid; S.tab = 'social'; render(); markRead(uid); if (!rtOk) pullMsgs(); }
+  window.__goliathSocial = {openChat: uid => { if (me && accepted().some(f => otherOf(f) === uid)) openChat(uid); else { S.tab = 'social'; render(); } }};
   function sendPanel(){
     const C = progChoices(), F = accepted().map(otherOf).filter(Boolean);
     if (send.prog && !C.some(c => c.key === send.prog)) send.prog = null;

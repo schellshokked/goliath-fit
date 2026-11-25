@@ -178,3 +178,103 @@ revoke all on public.goliath_messages from anon;
 grant select, insert, delete on public.goliath_messages to authenticated;
 grant update (read_at) on public.goliath_messages to authenticated;
 alter publication supabase_realtime add table public.goliath_messages;
+
+
+-- =====================================================================
+-- Migration "goliath_push_notifications": web push subscriptions, settings, triggers and the reminder timer.
+-- VAPID keys and the trigger secret are stored in Supabase Vault (goliath_vapid_private, goliath_vapid_public, goliath_hook_secret).
+create extension if not exists pg_net;
+create extension if not exists pg_cron;
+
+create table public.goliath_push_subs (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references auth.users(id) on delete cascade default auth.uid(),
+  endpoint   text not null unique check (endpoint like 'https://%'),
+  p256dh     text not null,
+  auth       text not null,
+  ua         text not null default '',
+  created_at timestamptz not null default now()
+);
+create index goliath_push_subs_user_idx on public.goliath_push_subs (user_id);
+alter table public.goliath_push_subs enable row level security;
+create policy "See own devices" on public.goliath_push_subs for select to authenticated using (user_id = (select auth.uid()));
+create policy "Remove own devices" on public.goliath_push_subs for delete to authenticated using (user_id = (select auth.uid()));
+revoke all on public.goliath_push_subs from anon;
+grant select, delete on public.goliath_push_subs to authenticated;
+
+create or replace function public.goliath_save_push_sub(p_endpoint text, p_p256dh text, p_auth text, p_ua text default '')
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if auth.uid() is null then raise exception 'not signed in'; end if;
+  delete from public.goliath_push_subs where endpoint = p_endpoint;
+  insert into public.goliath_push_subs(user_id, endpoint, p256dh, auth, ua) values (auth.uid(), p_endpoint, p_p256dh, p_auth, left(coalesce(p_ua,''), 200));
+end $$;
+revoke all on function public.goliath_save_push_sub(text, text, text, text) from public, anon;
+grant execute on function public.goliath_save_push_sub(text, text, text, text) to authenticated;
+
+create table public.goliath_notify_prefs (
+  user_id         uuid primary key references auth.users(id) on delete cascade default auth.uid(),
+  messages        boolean not null default true,
+  requests        boolean not null default true,
+  programs        boolean not null default true,
+  friend_workouts boolean not null default true,
+  reminders       boolean not null default false,
+  remind_days     smallint[] not null default '{}',
+  remind_time     time not null default '18:00',
+  weekly          boolean not null default true,
+  tz              text not null default 'America/New_York',
+  last_reminded   date,
+  last_weekly     date,
+  updated_at      timestamptz not null default now()
+);
+alter table public.goliath_notify_prefs enable row level security;
+create policy "Own notification settings" on public.goliath_notify_prefs for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+revoke all on public.goliath_notify_prefs from anon;
+grant select, insert, update on public.goliath_notify_prefs to authenticated;
+
+create or replace function public.goliath_push_config()
+returns jsonb language sql stable security definer set search_path = '' as $$
+  select jsonb_object_agg(name, decrypted_secret) from vault.decrypted_secrets
+  where name in ('goliath_vapid_private','goliath_vapid_public','goliath_hook_secret');
+$$;
+revoke all on function public.goliath_push_config() from public, anon, authenticated;
+grant execute on function public.goliath_push_config() to service_role;
+
+create or replace function private.goliath_push(payload jsonb)
+returns void language plpgsql security definer set search_path = '' as $$
+declare s text;
+begin
+  select decrypted_secret into s from vault.decrypted_secrets where name = 'goliath_hook_secret';
+  perform net.http_post(
+    url := 'https://djmdcwchmxzraxsafwxb.supabase.co/functions/v1/goliath-push',
+    body := payload,
+    headers := jsonb_build_object('Content-Type','application/json','x-goliath-hook', s),
+    timeout_milliseconds := 8000);
+exception when others then null;
+end $$;
+revoke all on function private.goliath_push(jsonb) from public, anon, authenticated;
+
+create or replace function private.goliath_push_trigger()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_table_name = 'goliath_friends' and tg_op = 'INSERT' then
+    perform private.goliath_push(jsonb_build_object('kind','request','record',to_jsonb(new)));
+  elsif tg_table_name = 'goliath_friends' and tg_op = 'UPDATE' and old.status = 'pending' and new.status = 'accepted' then
+    perform private.goliath_push(jsonb_build_object('kind','accepted','record',to_jsonb(new)));
+  elsif tg_table_name = 'goliath_messages' then
+    perform private.goliath_push(jsonb_build_object('kind','message','record',to_jsonb(new)));
+  elsif tg_table_name = 'goliath_program_shares' then
+    perform private.goliath_push(jsonb_build_object('kind','program','record',to_jsonb(new) - 'program'));
+  elsif tg_table_name = 'goliath_workouts' then
+    perform private.goliath_push(jsonb_build_object('kind','workout','record',to_jsonb(new)));
+  end if;
+  return null;
+end $$;
+
+create trigger goliath_push_friends after insert or update on public.goliath_friends for each row execute function private.goliath_push_trigger();
+create trigger goliath_push_messages after insert on public.goliath_messages for each row execute function private.goliath_push_trigger();
+create trigger goliath_push_programs after insert on public.goliath_program_shares for each row execute function private.goliath_push_trigger();
+create trigger goliath_push_workouts after insert on public.goliath_workouts for each row execute function private.goliath_push_trigger();
+
+select cron.schedule('goliath-push-tick', '*/15 * * * *', $$select private.goliath_push('{"kind":"tick"}'::jsonb)$$);
