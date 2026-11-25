@@ -278,3 +278,8 @@ create trigger goliath_push_programs after insert on public.goliath_program_shar
 create trigger goliath_push_workouts after insert on public.goliath_workouts for each row execute function private.goliath_push_trigger();
 
 select cron.schedule('goliath-push-tick', '*/15 * * * *', $$select private.goliath_push('{"kind":"tick"}'::jsonb)$$);
+
+-- Migration "goliath_push_service_grants": the sender runs as service_role, which this project doesn't grant by default.
+grant select on public.goliath_profiles, public.goliath_friends, public.goliath_workouts, public.goliath_notify_prefs, public.goliath_push_subs to service_role;
+grant update (last_reminded, last_weekly) on public.goliath_notify_prefs to service_role;
+grant delete on public.goliath_push_subs to service_role;
